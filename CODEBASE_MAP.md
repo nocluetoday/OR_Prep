@@ -5,7 +5,7 @@ Inherited from the fork (commit `725adc1` of `resident_learning_wiki`). Tutor-sp
 ## Top level
 
 ```
-PROJECT_PIVOT_2.md       Authoritative scope and four-phase plan
+OR Procedural Case Prep.md       Authoritative scope and four-phase plan
 README.md                Project description, stack, local dev, deploy story
 CLAUDE.md                Agent guide (this file's neighbor)
 CODEBASE_MAP.md          This file

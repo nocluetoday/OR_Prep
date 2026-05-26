@@ -4,7 +4,7 @@
 >
 > **Forked from [`resident_learning_wiki`](https://github.com/nocluetoday/resident_learning_wiki)** at commit `725adc1`. The prior project's educational philosophy work remains as an archived research artifact at that repo.
 
-If you are starting a Claude Code session against this repo, read [PROJECT_PIVOT_2.md](PROJECT_PIVOT_2.md) first.
+If you are starting a Claude Code session against this repo, read [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) first.
 
 ## What this tool does
 
@@ -48,7 +48,7 @@ Not yet built (Phase A onward):
 - Citation as a validated tool call in LLM generation.
 - Briefing input form, briefing renderer, telemetry tables, debrief form.
 
-The four-phase plan, with definitions of done per phase, is in [PROJECT_PIVOT_2.md](PROJECT_PIVOT_2.md).
+The four-phase plan, with definitions of done per phase, is in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md).
 
 ## Running it locally
 
@@ -91,7 +91,7 @@ docker/                 docker-compose, Dockerfiles, .env.example
 modules/                Faculty-authored case content (YAML; imported into DB)
 schemas/                YAML schemas for module / catalog
 docs/                   Project notes and journal
-PROJECT_PIVOT_2.md      Authoritative scope and four-phase plan; read this first
+OR Procedural Case Prep.md      Authoritative scope and four-phase plan; read this first
 ```
 
 ## Deploy

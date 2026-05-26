@@ -4,7 +4,7 @@ This is a proof-of-concept procedural case-prep tool for urology residents. Resi
 
 ## Read first
 
-[PROJECT_PIVOT_2.md](PROJECT_PIVOT_2.md) is the authoritative scope, plan, and non-goals. Everything in this repo is downstream of that doc. If anything below conflicts with the pivot doc, the pivot doc wins.
+[OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) is the authoritative scope, plan, and non-goals. Everything in this repo is downstream of that doc. If anything below conflicts with the pivot doc, the pivot doc wins.
 
 ## Non-negotiable constraints
 
