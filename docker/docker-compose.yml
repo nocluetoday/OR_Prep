@@ -1,0 +1,76 @@
+# Dev stack: postgres + Django backend + Vite/React frontend.
+# Hot reload via bind mounts; named volumes mask host artifacts that wouldn't
+# work inside the Linux containers (.venv from macOS, node_modules built for
+# darwin-arm64, etc).
+#
+# Run from this directory:
+#   cp .env.example .env       # first time only
+#   docker compose up --build
+#   docker compose down        # stop, keep data
+#   docker compose down -v     # stop, wipe postgres data
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rlw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rlw}
+      POSTGRES_DB: ${POSTGRES_DB:-rlw_dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rlw} -d ${POSTGRES_DB:-rlw_dev}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-change-me}
+      DJANGO_DEBUG: "True"
+      DJANGO_ALLOWED_HOSTS: "*"
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      DATABASE_URL: postgres://${POSTGRES_USER:-rlw}:${POSTGRES_PASSWORD:-rlw}@postgres:5432/${POSTGRES_DB:-rlw_dev}
+      # Path to the faculty-authored module YAML root. In compose this points at
+      # the read-only bind mount; native dev falls back to ../modules.
+      MODULES_DIR: /modules
+    volumes:
+      - ../backend:/app
+      - backend-venv:/app/.venv
+      # Schema layer (faculty-authored curriculum) — read-only so the app can
+      # import YAML but can't accidentally write back to git-tracked content.
+      - ../modules:/modules:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+    volumes:
+      - ../frontend:/app
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  backend-venv:
+  frontend-node-modules:

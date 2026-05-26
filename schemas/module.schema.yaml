@@ -1,0 +1,66 @@
+# Human-readable starter schema for learning modules.
+
+module_id: string
+title: string
+curriculum: string
+specialty: string
+learner_level: string
+estimated_minutes: number
+module_type: clinical_reasoning | ethics | board_review | procedural | communication | mixed
+status: draft | faculty_reviewed | pilot_ready | active | retired
+version: string
+source_version_date: string
+
+references:
+  - id: string
+    title: string
+    url: string
+    version_date: string
+    approved_by: string
+
+learning_objectives:
+  - id: string
+    text: string
+    domain: knowledge | reasoning | communication | ethics | procedural
+
+activities:
+  - id: string
+    type: orientation | pretest | ai_tutor_dialogue | branching_case | knowledge_check | reflection | remediation | summary
+    title: string
+    objective_ids:
+      - string
+
+cases:
+  - id: string
+    title: string
+    stem: string
+    decision_points:
+      - id: string
+        prompt: string
+        objective_ids:
+          - string
+        expected_reasoning:
+          - string
+
+knowledge_checks:
+  - id: string
+    question: string
+    options:
+      - id: string
+        text: string
+    correct_option_id: string
+    explanation: string
+    objective_ids:
+      - string
+
+remediation_paths:
+  - id: string
+    trigger_objective_id: string
+    activity: string
+    success_criteria: string
+
+faculty_review:
+  reviewer: string
+  reviewed_date: string
+  notes: string
+

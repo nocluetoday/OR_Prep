@@ -1,0 +1,108 @@
+module_id: urology-bph-mvp-001
+title: "BPH and LUTS: Evaluation and Shared Decision-Making"
+curriculum: urology
+specialty: urology
+learner_level: PGY-2 to PGY-4
+estimated_minutes: 30
+module_type: clinical_reasoning
+status: draft
+version: "0.1.0"
+source_version_date: TBD
+
+references:
+  - id: bph-ref-001
+    title: TBD faculty-approved BPH guideline or review
+    url: TBD
+    version_date: TBD
+    approved_by: TBD
+
+learning_objectives:
+  - id: bph-lo-1
+    text: Identify key symptoms and initial evaluation steps for lower urinary tract symptoms suggestive of BPH.
+    domain: reasoning
+  - id: bph-lo-2
+    text: Compare medical and procedural management options using patient-centered tradeoffs.
+    domain: knowledge
+  - id: bph-lo-3
+    text: Practice shared decision-making around symptom burden, risks, benefits, and follow-up.
+    domain: communication
+
+activities:
+  - id: bph-orientation
+    type: orientation
+    title: Objectives and baseline confidence
+    objective_ids: [bph-lo-1, bph-lo-2, bph-lo-3]
+  - id: bph-case
+    type: branching_case
+    title: Initial LUTS evaluation case
+    objective_ids: [bph-lo-1, bph-lo-2, bph-lo-3]
+  - id: bph-questions
+    type: knowledge_check
+    title: BPH knowledge check
+    objective_ids: [bph-lo-1, bph-lo-2]
+  - id: bph-remediation
+    type: remediation
+    title: Objective-linked remediation
+    objective_ids: [bph-lo-1, bph-lo-2, bph-lo-3]
+
+cases:
+  - id: bph-case-001
+    title: Initial evaluation of bothersome LUTS
+    stem: A simulated patient presents with progressive urinary frequency, nocturia, weak stream, and incomplete emptying. No patient-identifying details are included.
+    decision_points:
+      - id: bph-dp-1
+        prompt: What additional history and symptom details would you ask for first?
+        objective_ids: [bph-lo-1]
+        expected_reasoning:
+          - Clarifies obstructive and irritative symptoms.
+          - Screens for red flags and alternative causes.
+          - Assesses symptom burden and goals.
+      - id: bph-dp-2
+        prompt: What initial evaluation would you consider, and why?
+        objective_ids: [bph-lo-1]
+        expected_reasoning:
+          - Explains basic evaluation steps.
+          - Avoids unnecessary testing without indication.
+          - Connects evaluation to differential and management.
+      - id: bph-dp-3
+        prompt: How would you discuss initial management options with the patient?
+        objective_ids: [bph-lo-2, bph-lo-3]
+        expected_reasoning:
+          - Compares conservative, medical, and procedural options at a high level.
+          - Discusses benefits, side effects, and preferences.
+          - Uses shared decision-making language.
+
+knowledge_checks:
+  - id: bph-q-001
+    question: Which feature would most strongly prompt consideration of an alternate diagnosis or more urgent evaluation in a LUTS scenario?
+    options:
+      - id: a
+        text: Mild nocturia alone
+      - id: b
+        text: Longstanding weak stream without bother
+      - id: c
+        text: Gross hematuria or systemic symptoms
+      - id: d
+        text: Preference to avoid medication
+    correct_option_id: c
+    explanation: Red flags such as gross hematuria or systemic symptoms should prompt broader evaluation rather than assuming uncomplicated BPH. Final wording should be faculty-reviewed and source-aligned.
+    objective_ids: [bph-lo-1]
+
+remediation_paths:
+  - id: bph-remediation-evaluation
+    trigger_objective_id: bph-lo-1
+    activity: Review initial LUTS evaluation and repeat a case decision focused on red flags and alternate diagnoses.
+    success_criteria: Learner identifies key evaluation features and explains their relevance.
+  - id: bph-remediation-management
+    trigger_objective_id: bph-lo-2
+    activity: Compare medical and procedural options in a short table, then answer a follow-up management question.
+    success_criteria: Learner names tradeoffs and links options to patient goals.
+  - id: bph-remediation-communication
+    trigger_objective_id: bph-lo-3
+    activity: Draft a shared decision-making explanation in plain language.
+    success_criteria: Learner explains choices, risks, benefits, and uncertainty clearly.
+
+faculty_review:
+  reviewer: TBD
+  reviewed_date: TBD
+  notes: Draft scaffold only. Requires faculty-approved references and clinical review before learner use.

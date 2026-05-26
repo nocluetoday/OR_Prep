@@ -1,0 +1,99 @@
+module_id: urology-ethics-consent-mvp-001
+title: "Informed Consent and Disclosure of Complications"
+curriculum: urology
+specialty: urology
+learner_level: PGY-1 to PGY-5
+estimated_minutes: 30
+module_type: ethics
+status: draft
+version: "0.1.0"
+source_version_date: TBD
+
+references:
+  - id: ethics-ref-001
+    title: TBD faculty-approved ethics, consent, or institutional policy reference
+    url: TBD
+    version_date: TBD
+    approved_by: TBD
+
+learning_objectives:
+  - id: ethics-lo-1
+    text: Identify core elements of informed consent in a procedural context.
+    domain: ethics
+  - id: ethics-lo-2
+    text: Practice transparent disclosure of complications using clear and empathetic language.
+    domain: communication
+  - id: ethics-lo-3
+    text: Reflect on supervision, uncertainty, and professionalism in resident-patient communication.
+    domain: ethics
+
+activities:
+  - id: ethics-orientation
+    type: orientation
+    title: Objectives and baseline reflection
+    objective_ids: [ethics-lo-1, ethics-lo-2, ethics-lo-3]
+  - id: ethics-scenario
+    type: branching_case
+    title: Consent and complication disclosure scenario
+    objective_ids: [ethics-lo-1, ethics-lo-2, ethics-lo-3]
+  - id: ethics-reflection
+    type: reflection
+    title: Professional reflection
+    objective_ids: [ethics-lo-2, ethics-lo-3]
+
+cases:
+  - id: ethics-case-001
+    title: Disclosure after a procedural complication
+    stem: A simulated postoperative scenario asks the resident to prepare for a disclosure conversation after a complication. No patient-identifying details are included.
+    decision_points:
+      - id: ethics-dp-1
+        prompt: What facts do you need before speaking with the patient or family?
+        objective_ids: [ethics-lo-2, ethics-lo-3]
+        expected_reasoning:
+          - Clarifies what is known and uncertain.
+          - Identifies need for supervision and team alignment.
+          - Avoids speculation.
+      - id: ethics-dp-2
+        prompt: How would you open the disclosure conversation?
+        objective_ids: [ethics-lo-2]
+        expected_reasoning:
+          - Uses clear language.
+          - Acknowledges emotion.
+          - Explains known facts and next steps.
+      - id: ethics-dp-3
+        prompt: What ethical principles are relevant?
+        objective_ids: [ethics-lo-1, ethics-lo-3]
+        expected_reasoning:
+          - Names transparency, autonomy, beneficence, nonmaleficence, and professionalism as relevant when appropriate.
+          - Connects principles to behavior.
+
+knowledge_checks:
+  - id: ethics-q-001
+    question: In an informed consent conversation, which element is most important to include along with the proposed intervention?
+    options:
+      - id: a
+        text: Only the expected benefit
+      - id: b
+        text: Risks, benefits, alternatives, and opportunity for questions
+      - id: c
+        text: A guarantee of outcome
+      - id: d
+        text: Technical procedural details only
+    correct_option_id: b
+    explanation: Informed consent requires more than naming the intervention. It should include risks, benefits, alternatives, and a chance for questions, with final wording reviewed against local policy and faculty-approved references.
+    objective_ids: [ethics-lo-1]
+
+remediation_paths:
+  - id: ethics-remediation-consent
+    trigger_objective_id: ethics-lo-1
+    activity: Review the core consent elements and rewrite a consent explanation in plain language.
+    success_criteria: Learner includes risks, benefits, alternatives, and questions.
+  - id: ethics-remediation-disclosure
+    trigger_objective_id: ethics-lo-2
+    activity: Practice a disclosure opening statement with feedback on clarity and empathy.
+    success_criteria: Learner communicates known facts, uncertainty, apology or empathy when appropriate, and next steps.
+
+faculty_review:
+  reviewer: TBD
+  reviewed_date: TBD
+  notes: Draft scaffold only. Requires faculty and institutional policy review before learner use.

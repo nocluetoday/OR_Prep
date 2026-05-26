@@ -1,0 +1,86 @@
+module_id: topic-mvp-001
+title: Topic Title
+curriculum: general
+specialty: general
+learner_level: mixed
+estimated_minutes: 30
+module_type: mixed
+status: draft
+version: "0.1.0"
+source_version_date: TBD
+
+references:
+  - id: ref-001
+    title: TBD faculty-approved reference
+    url: TBD
+    version_date: TBD
+    approved_by: TBD
+
+learning_objectives:
+  - id: lo-1
+    text: Define the core problem and identify key features.
+    domain: reasoning
+  - id: lo-2
+    text: Compare reasonable next steps using source-aligned reasoning.
+    domain: knowledge
+  - id: lo-3
+    text: Communicate tradeoffs clearly and reflect on uncertainty.
+    domain: communication
+
+activities:
+  - id: activity-orientation
+    type: orientation
+    title: Module orientation
+    objective_ids: [lo-1, lo-2, lo-3]
+  - id: activity-case
+    type: branching_case
+    title: Case-based reasoning practice
+    objective_ids: [lo-1, lo-2]
+  - id: activity-check
+    type: knowledge_check
+    title: Knowledge check
+    objective_ids: [lo-2]
+  - id: activity-remediation
+    type: remediation
+    title: Focused remediation
+    objective_ids: [lo-1, lo-2, lo-3]
+
+cases:
+  - id: case-001
+    title: Starter case
+    stem: TBD educational case stem.
+    decision_points:
+      - id: dp-1
+        prompt: What features stand out, and what would you do next?
+        objective_ids: [lo-1]
+        expected_reasoning:
+          - Identifies key findings.
+          - Explains why they matter.
+
+knowledge_checks:
+  - id: q-001
+    question: TBD question.
+    options:
+      - id: a
+        text: TBD
+      - id: b
+        text: TBD
+      - id: c
+        text: TBD
+      - id: d
+        text: TBD
+    correct_option_id: TBD
+    explanation: TBD explanation.
+    objective_ids: [lo-2]
+
+remediation_paths:
+  - id: remediation-001
+    trigger_objective_id: lo-1
+    activity: Review the core content outline and repeat a related case decision.
+    success_criteria: Learner explains the key features and next step in their own words.
+
+faculty_review:
+  reviewer: TBD
+  reviewed_date: TBD
+  notes: TBD
+

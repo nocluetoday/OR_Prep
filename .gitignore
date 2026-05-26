@@ -1,0 +1,53 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# Claude Code per-machine launch config (user-specific absolute paths)
+.claude/launch.json
+
+# Python / Django
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+staticfiles/
+*.sqlite3
+*.sqlite3-journal
+
+# Node / React / Vite
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.turbo/
+
+# Logs
+*.log
+logs/
+
+# Uploads / runtime user data (never commit) — anchored to repo root so
+# nested app dirs like backend/apps/wiki/ aren't accidentally excluded.
+/uploads/
+/media/
+
+# LLM-curated wiki (bind-mounted; faculty-reviewed in-app, not via git)
+/wiki/
+
+# IDE
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,27 @@
+catalog_version: "0.1.0"
+updated: "2026-05-24"
+
+curricula:
+  - id: urology
+    title: Urology
+    description: Topic-based resident education modules for urology.
+    module_groups:
+      - id: benign-functional
+        title: Benign and Functional Urology
+        modules:
+          - module_id: urology-bph-mvp-001
+            title: "BPH and LUTS: Evaluation and Shared Decision-Making"
+            path: modules/urology/bph/module.yaml
+            status: draft
+            estimated_minutes: 30
+            learner_level: PGY-2 to PGY-4
+      - id: ethics-communication-professionalism
+        title: Ethics, Communication, and Professionalism
+        modules:
+          - module_id: urology-ethics-consent-mvp-001
+            title: "Informed Consent and Disclosure of Complications"
+            path: modules/urology/ethics-in-consent/module.yaml
+            status: draft
+            estimated_minutes: 30
+            learner_level: PGY-1 to PGY-5
+

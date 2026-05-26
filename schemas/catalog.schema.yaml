@@ -1,0 +1,20 @@
+# Human-readable starter schema for module catalogs.
+
+catalog_version: string
+updated: date
+
+curricula:
+  - id: string
+    title: string
+    description: string
+    module_groups:
+      - id: string
+        title: string
+        modules:
+          - module_id: string
+            title: string
+            path: string
+            status: draft | faculty_reviewed | pilot_ready | active | retired
+            estimated_minutes: number
+            learner_level: string
+
