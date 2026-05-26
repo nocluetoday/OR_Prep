@@ -107,7 +107,7 @@ KU urology residents are the opt-in beta cohort during Phase C. IRB protocol or 
 ## Constraints to honor
 
 - Single instance, single specialty (endourology first, broader urology only if author bandwidth exists).
-- ~$1000/month all-in budget.
+- ~$100/month all-in budget.
 - Telemetry first-class — captured before the first beta user touches the system.
 - Correctness over features — a briefing that confidently asserts something incorrect is the worst possible failure mode, because residents use it to prepare for live surgery.
 - No PHI in inputs.
