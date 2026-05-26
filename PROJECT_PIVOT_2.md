@@ -1,6 +1,4 @@
-# Project Pivot 2: Fork to Procedural Case-Prep Tool
-
-This document supersedes `PROJECT_PIVOT.md`. Read this first. The prior pivot doc described a two-mode tutor; this one replaces that surface with a case-prep tool while keeping the correctness layer and infrastructure underneath.
+# OR Procedural Case-Prep Tool
 
 ## What this project is
 
