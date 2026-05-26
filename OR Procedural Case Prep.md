@@ -10,7 +10,7 @@ Not a tutor. Not a question bank. Not a study tool. A case-prep tool.
 
 - Proof of concept and research artifact. Adoption is not the goal.
 - Open source, MIT.
-- ~$1000/month all-in budget.
+- ~$100/month all-in budget.
 - KU urology residents as opt-in beta testers.
 - Outputs: working demo, design rationale, telemetry data, paper, conference abstract.
 - Telemetry is first-class. Captured before the first beta user touches the system.
@@ -20,7 +20,7 @@ Not a tutor. Not a question bank. Not a study tool. A case-prep tool.
 1. **Open source, MIT.** No proprietary dependencies blocking redistribution. Anthropic API is acceptable.
 2. **Telemetry first-class.** Every briefing request is captured: inputs, outputs, citations, validation status, cost, optional post-case debrief.
 3. **Correctness over features.** Every claim in a briefing must trace to a reviewed source. A briefing that confidently asserts something incorrect is the worst possible failure mode, because residents are using it to prepare for live surgery.
-4. **Cost ceiling: ~$1000/month all-in.** Track spend continuously.
+4. **Cost ceiling: ~$100/month all-in.** Track spend continuously.
 5. **No PHI.** Resident inputs are case characteristics, not patient identifiers. Reinforce in UI on every session.
 6. **No clinical decision support.** Persistent disclaimer that this is educational preparation, not intraoperative guidance.
 7. **Reproducible.** Clone the repo, follow the README, stack stands up in under an hour with an Anthropic API key.
@@ -170,13 +170,14 @@ All tables get `exported_at` to track research data exports. A management comman
 - Use Anthropic prompt caching for the static parts (module YAML, system prompt). Should cut per-briefing cost substantially.
 - Ingest cost: $2-5 per document.
 
-**Implication:** with 5 beta testers doing 2 briefings per week, ~$5-15/month on briefings. Comfortably within budget. Bursty ingest weeks (heavy authoring) could be $100-200; still fine.
+**Implication:** with 5 beta testers doing 2 briefings per week, ~$5-15/month on briefings. Comfortably within the $100/month cap. Ingest is the cost risk: a 5-document authoring burst at $5/doc consumes a quarter of the monthly budget, so ingest needs an explicit cap and admin confirmation per run rather than ad-hoc upload.
 
 **Rate limiting and budget guardrails:**
 
 - Per-user daily briefing cap (e.g., 10 briefings per resident per day). Configurable.
 - Per-document ingest cap (no document ingested twice without admin override).
-- Daily spend alert if yesterday's total exceeded $20.
+- Monthly ingest budget envelope (default $30) — ingest refuses to run when the month-to-date ingest spend would exceed it without `--force`.
+- Daily spend alert if yesterday's total exceeded $5.
 
 Model selection: Claude Sonnet (`claude-sonnet-4-5`) for briefings. Opus is overkill. Reserve Opus for ingest if quality demands.
 
@@ -218,7 +219,7 @@ Break this plan if:
 
 - Phase A audit pass cannot reliably catch weak attributions (false negative rate too high). The architecture is wrong; rethink before Phase B.
 - Beta debriefs in Phase C flag a correctness incident. Stop, diagnose, patch the audit pass, do not move to D until fixed.
-- Cost projections at observed Phase C usage exceed $300/month. Redesign before opening to more users.
+- Cost projections at observed Phase C usage exceed $80/month sustained. Redesign before opening to more users.
 - After three resident validation conversations, none of them say they'd use the tool. Stop and reconsider scope.
 
 Do not break this plan for:
@@ -241,4 +242,4 @@ Do not break this plan for:
 
 Paste this at the top of any new Claude Code session working on this repo:
 
-> Read `OR Procedural Case Prep.md` first. This is a proof-of-concept procedural cognitive prep tool for urology residents, not a tutor. The user inputs a case, the tool produces a structured briefing with cited sources. Adoption is not a goal. Optimize for correctness, demonstrability, and research output. Telemetry is first-class. Single instance, single specialty, MIT, ~$1000/month all-in budget. Do not propose tutor surfaces, learn-it modes, calibration tracking, adoption mechanics, multi-tenancy, or production hardening beyond a single VPS unless I explicitly ask.
+> Read `OR Procedural Case Prep.md` first. This is a proof-of-concept procedural cognitive prep tool for urology residents, not a tutor. The user inputs a case, the tool produces a structured briefing with cited sources. Adoption is not a goal. Optimize for correctness, demonstrability, and research output. Telemetry is first-class. Single instance, single specialty, MIT, ~$100/month all-in budget. Do not propose tutor surfaces, learn-it modes, calibration tracking, adoption mechanics, multi-tenancy, or production hardening beyond a single VPS unless I explicitly ask.

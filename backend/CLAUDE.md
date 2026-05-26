@@ -6,10 +6,11 @@ Django 5.2 + DRF. Source of truth for users, modules, progress, uploads.
 
 - `config/` — project: `settings/{base,dev,prod}.py`, `urls.py`, `views.py` (health), wsgi/asgi
 - `apps/users/` — custom User model (email login, role), auth endpoints, role permission classes
-- `apps/modules/` — curriculum schema: Module + LearningObjective + KnowledgeCheck + Reference; YAML importer
-- `apps/documents/` — raw uploaded source files (schema in place; upload flow + extraction land in Phase A/B)
-- `apps/wiki/` — LLM-curated knowledge pages with page-level review status (schema in place; ingest + claim attribution land in Phase A)
-- `apps/` — additional apps planned in Phase A: case templates, surgeon preferences, telemetry
+- `apps/cases/` — CaseTemplate + SurgeonPreference. `services/briefing.py` owns the briefing tool-use loop with `cite(claim_id)`; `management/commands/generate_briefing.py` is the CLI.
+- `apps/wiki/` — WikiPage + Claim. `services/anthropic_client.py` centralizes SDK config (raises a clear error when `ANTHROPIC_API_KEY` is unset). `services/ingest.py` runs propose → adversarial-audit; `management/commands/ingest_document.py` is the CLI.
+- `apps/documents/` — Document with source freshness fields (`source_date`, `citation`, `review_status`, `reviewed_by`, `last_reviewed_at`). FK is mutually exclusive between `case_template` and `module`.
+- `apps/modules/` — legacy curriculum schema (Module + LearningObjective + KnowledgeCheck + Reference) + `import_modules` YAML importer. Retained for compatibility; not read by the briefing path.
+- `apps/` — telemetry app planned in Phase B (per-request rows for inputs, outputs, validation results, cost).
 - `.venv/` — local virtualenv (gitignored)
 - `.env.example` — copy to `.env` to override defaults
 - `db.sqlite3` — dev database used only when `DATABASE_URL` is unset (native dev fallback); Postgres ships via docker-compose
@@ -33,7 +34,15 @@ Run from `backend/`:
 .venv/bin/python manage.py migrate                    # apply migrations
 .venv/bin/python manage.py makemigrations             # generate migrations
 .venv/bin/python manage.py createsuperuser            # admin login
-.venv/bin/python manage.py import_modules             # seed Module schema from modules/*.yaml
+.venv/bin/python manage.py import_modules             # seed legacy Module schema from modules/*.yaml
+.venv/bin/python manage.py ingest_document <path> \
+    --case-type holep --wiki-page-path operative-technique \
+    --citation "AUA HoLEP Guideline (2024)" --source-date 2024-08 \
+    --uploaded-by faculty@example.com                 # extract+propose+audit Claims from a source
+.venv/bin/python manage.py generate_briefing \
+    --case holep --time 10 --surgeon neff@example.com \
+    --factors 'prostate_volume_g=80,anticoagulation=warfarin' \
+    --focus 'large median lobe, worried about apex'   # produce a structured cited briefing
 .venv/bin/python manage.py check                      # config validation
 .venv/bin/pip install -r requirements-dev.txt         # dev deps
 .venv/bin/ruff check .                                # lint
@@ -41,6 +50,8 @@ Run from `backend/`:
 ```
 
 `import_modules` reads `MODULES_DIR` (defaults to `../modules` natively; compose sets it to `/modules`). Skips `_template/`. Idempotent on YAML changes (re-runs detect adds/edits/deletes for objectives, knowledge checks, and references). Pass `--path /custom/path` or `--dry-run` for variants.
+
+`ingest_document` and `generate_briefing` both require `ANTHROPIC_API_KEY` in env or `backend/.env`. They fail loudly when it is unset; they never silently no-op. Default models are configurable via `ANTHROPIC_BRIEFING_MODEL` / `ANTHROPIC_INGEST_MODEL` / `ANTHROPIC_AUDIT_MODEL` (defaults: Sonnet 4.6 for briefings + ingest, Opus 4.7 for the adversarial audit).
 
 ## Conventions
 

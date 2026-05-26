@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.modules",
     "apps.documents",
     "apps.wiki",
+    "apps.cases",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -99,6 +100,30 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # the backend directory for native dev; docker-compose overrides this to /modules
 # via env var so the read-only bind mount is the source.
 MODULES_DIR = env("MODULES_DIR", default=str((BASE_DIR.parent / "modules").resolve()))
+
+# Anthropic SDK configuration. Read by ingest + briefing services. Both raise a
+# clear error when ANTHROPIC_API_KEY is unset rather than silently failing.
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+ANTHROPIC_BRIEFING_MODEL = env(
+    "ANTHROPIC_BRIEFING_MODEL",
+    default="claude-sonnet-4-6",
+)
+ANTHROPIC_INGEST_MODEL = env(
+    "ANTHROPIC_INGEST_MODEL",
+    default="claude-sonnet-4-6",
+)
+ANTHROPIC_AUDIT_MODEL = env(
+    "ANTHROPIC_AUDIT_MODEL",
+    default="claude-opus-4-7",
+)
+
+# Per-resident daily briefing cap; the briefing command refuses to run further
+# requests for a user once they hit this number on a given day.
+BRIEFING_DAILY_CAP_PER_USER = env.int("BRIEFING_DAILY_CAP_PER_USER", default=10)
+
+# Soft monthly ingest budget envelope (USD). The ingest command warns and refuses
+# to run when month-to-date ingest spend would exceed this without --force.
+INGEST_MONTHLY_BUDGET_USD = env.float("INGEST_MONTHLY_BUDGET_USD", default=30.0)
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 

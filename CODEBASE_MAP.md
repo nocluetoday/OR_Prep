@@ -40,12 +40,24 @@ backend/
   apps/
     users/                   custom User (email login, role enum), JWT endpoints,
                              role permission classes, customized Django admin
-    modules/                 Module / LearningObjective / KnowledgeCheck / Reference;
-                             import_modules management command
-    documents/               Document schema (raw upload metadata) — upload flow is
-                             Phase B / Phase A work, not yet wired
-    wiki/                    WikiPage with page-level draft/published/archived status;
-                             source_documents M2M; LLM-curated knowledge layer
+    cases/                   CaseTemplate (per case type) + SurgeonPreference
+                             (per attending, per case type). The briefing
+                             surface in management/commands/generate_briefing.py
+                             loads exactly one of each into the LLM context.
+    wiki/                    WikiPage (now attached to CaseTemplate or legacy Module)
+                             + Claim (per factual statement, with FK to Document,
+                             source quote/locator, and audit-status lifecycle).
+                             services/anthropic_client.py centralizes SDK config;
+                             services/ingest.py runs the propose+audit pipeline;
+                             management/commands/ingest_document.py is the CLI.
+    documents/               Document (raw uploads) extended with source_date,
+                             citation, review_status, reviewed_by, last_reviewed_at.
+                             Attached to CaseTemplate (Phase A onward) or legacy
+                             Module via mutually-exclusive FKs.
+    modules/                 Legacy curriculum schema (Module / LearningObjective /
+                             KnowledgeCheck / Reference) + import_modules YAML
+                             importer. The briefing path does not read these;
+                             they are retained for compatibility.
 ```
 
 Every model carries `HistoricalRecords()` (django-simple-history) for audit. Admin gets a History button per row.
@@ -94,7 +106,7 @@ schemas/
   catalog.schema.yaml        YAML schema for catalog
 ```
 
-The starter modules are placeholder content. Phase A replaces them with case-template-shaped content (HoLEP, URS for stone, etc.) plus surgeon preferences for Don's HoLEP approach.
+The starter modules are placeholder content for the legacy `apps.modules` schema; the briefing path no longer reads them. Phase A authoring happens via the Django admin for `CaseTemplate` and `SurgeonPreference` rows under `apps.cases` (a YAML importer mirroring `import_modules` lands later if author bandwidth justifies it).
 
 ## Runtime user data (not committed)
 

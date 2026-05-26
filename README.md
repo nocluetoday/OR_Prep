@@ -34,23 +34,56 @@ Standing today:
 - Django scaffold with split settings (`config/settings/{base,dev,prod}.py`); compose with Postgres + backend + frontend; `/api/health/` endpoint returning DB-backed status.
 - JWT auth: custom `User` model (email login, role enum), register/login/refresh/logout/me endpoints, `IsResident`/`IsFaculty`/`IsAdmin` permission classes.
 - Frontend auth flow: login/register pages, protected `/`, `AuthContext` with transparent refresh-on-401.
-- Knowledge-base data model: `Module`, `LearningObjective`, `KnowledgeCheck`, `Reference` (in `apps.modules`); `Document` (raw upload schema, in `apps.documents`); `WikiPage` with page-level review status (in `apps.wiki`).
-- `python manage.py import_modules`: idempotent YAML importer for `modules/**/module.yaml`.
-- Two starter urology modules (HoLEP/BPH and ethics-in-consent) seed-loaded as placeholder content.
+- Briefing knowledge model (Phase A foundation):
+  - `apps.cases.CaseTemplate` and `apps.cases.SurgeonPreference` — the briefing skeleton and per-attending divergence schema.
+  - `apps.wiki.WikiPage` (now attached to a `CaseTemplate` or a legacy `Module`) and `apps.wiki.Claim` — one row per factual statement, with FK to `Document`, source quote/locator, and an audit-status lifecycle (`proposed → audited_ok / audited_weak → published / rejected`).
+  - `apps.documents.Document` extended with `source_date`, `citation`, `review_status`, `reviewed_by`, `last_reviewed_at`.
+  - `django-simple-history` on every model; citations are version-pinned at briefing time via the page's `history_id`.
+- Ingest CLI: `manage.py ingest_document <path> --case-type ... --wiki-page-path ... --citation ... --source-date ... --uploaded-by ...` runs extract → propose claims → adversarial audit → persist as draft Claims. Anthropic SDK calls are gated on `ANTHROPIC_API_KEY`.
+- Briefing CLI: `manage.py generate_briefing --case ... --factors ... --surgeon ... --time {5,10,20} --focus ...` runs a tool-use loop where the LLM must call `cite(claim_id)` for every factual claim; the server validates each call against published Claims and drops/flags unsupported ones before rendering markdown.
+- Legacy curriculum schema retained for compatibility: `Module`, `LearningObjective`, `KnowledgeCheck`, `Reference` in `apps.modules`, and the `import_modules` YAML importer. The briefing path does not read these.
 
-Not yet built (Phase A onward):
-- Claim-level source attribution on wiki pages.
-- Case template schema (one per case type — HoLEP, URS, PCNL, etc.).
-- Surgeon preference schema.
-- Ingest pipeline with adversarial audit.
-- Citation as a validated tool call in LLM generation.
-- Briefing input form, briefing renderer, telemetry tables, debrief form.
+## Roadmap
 
-The four-phase plan, with definitions of done per phase, is in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md).
+Four phases. Each item is checked off only when it actually lands; phases are marked complete only when their definition of done in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) is met (which for Phase A requires ingesting a real AUA HoLEP guideline PDF end-to-end).
+
+### Phase A — Correctness layer + knowledge base extension (in progress)
+
+- [x] `apps.cases` with `CaseTemplate` schema (one per case type) and `SurgeonPreference` schema (per attending, per case type), both with `HistoricalRecords`.
+- [x] Claim-level source attribution on wiki pages (`apps.wiki.Claim` with FK to `Document` + source-span quote/page).
+- [x] Page version pinning in citations — every claim resolved to a specific `WikiPage` history id so later edits don't silently invalidate prior briefings.
+- [x] Source freshness metadata on `Document` (`source_date`, `last_reviewed_at`, `review_status`, reviewer).
+- [x] Django admin registrations for `CaseTemplate`, `SurgeonPreference`, `Claim`, and `Document` review fields.
+- [x] Ingest pipeline stub (`manage.py ingest_document <path>`): extract → propose claims → adversarial audit → write as draft `Claim`s. Gated on `ANTHROPIC_API_KEY`.
+- [x] Briefing CLI stub (`manage.py generate_briefing --case ... --surgeon ... --time ...`) with the `cite(claim_id)` tool. Gated on `ANTHROPIC_API_KEY`; the server validates every `cite` against the DB and drops/flags unsupported claims before rendering.
+- [ ] HoLEP case template, Neff HoLEP surgeon preferences, and a real reviewed source ingested end-to-end (closes Phase A).
+
+### Phase B — Briefing surface (not started)
+
+- [ ] Input form (web UI, fillable in under 60 seconds).
+- [ ] Briefing renderer with inline citations hoverable to source quote.
+- [ ] Session telemetry: every briefing request stored with inputs, outputs, citations, validation results, and cost.
+- [ ] Disclaimer modal and footer ("Educational preparation only. Not intraoperative guidance.").
+
+### Phase C — Beta and post-case debrief (not started)
+
+- [ ] Minimal VPS deploy: Docker Compose + Caddy + Let's Encrypt + daily Postgres dump.
+- [ ] Post-case debrief form (matched-reality / missing / wrong / 1–5 usefulness rating).
+- [ ] Admin telemetry dashboard.
+- [ ] Recruit 3–5 KU urology residents; first real briefings generated.
+
+### Phase D — Writeup (not started)
+
+- [ ] Chair demo.
+- [ ] Methods + results draft.
+- [ ] AUA Education and Research subsection abstract submitted.
+- [ ] Paper draft (target: *Journal of Surgical Education*).
+
+Definitions of done and the "when to break the plan" criteria live in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md).
 
 ## Running it locally
 
-You need Docker, or Python 3.13 + Node 20+ for the native path.
+You need Docker, or Python 3.13 + Node 20+ for the native path. The Phase A ingest and briefing CLIs require an Anthropic API key in `ANTHROPIC_API_KEY` (`backend/.env` for native dev, `docker/.env` for compose). Both commands fail loudly when the key is unset.
 
 ### Docker (preferred)
 
@@ -82,11 +115,13 @@ Without `DATABASE_URL` set, the backend falls back to sqlite at `backend/db.sqli
 ## Repository layout
 
 ```
-backend/                Django: apps.users (auth), apps.modules (curriculum schema),
-                        apps.documents (raw uploads), apps.wiki (knowledge pages)
+backend/                Django: apps.users (auth), apps.cases (CaseTemplate +
+                        SurgeonPreference), apps.wiki (WikiPage + Claim),
+                        apps.documents (raw uploads + source freshness),
+                        apps.modules (legacy curriculum schema, not used by briefings)
 frontend/               Vite + React + TS; auth flow + protected routes
 docker/                 docker-compose, Dockerfiles, .env.example
-modules/                Faculty-authored case content (YAML; imported into DB)
+modules/                Legacy faculty-authored curriculum YAML (imported into apps.modules)
 schemas/                YAML schemas for module / catalog
 docs/                   Project notes and journal
 OR Procedural Case Prep.md      Authoritative scope and four-phase plan; read this first
