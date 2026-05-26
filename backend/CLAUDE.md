@@ -7,8 +7,8 @@ Django 5.2 + DRF. Source of truth for users, modules, progress, uploads.
 - `config/` — project: `settings/{base,dev,prod}.py`, `urls.py`, `views.py` (health), wsgi/asgi
 - `apps/users/` — custom User model (email login, role), auth endpoints, role permission classes
 - `apps/modules/` — curriculum schema: Module + LearningObjective + KnowledgeCheck + Reference; YAML importer
-- `apps/documents/` — raw uploaded source files (schema inherited; upload flow + extraction land in Phase A/B)
-- `apps/wiki/` — LLM-curated knowledge pages with page-level review status (schema inherited; ingest + claim attribution land in Phase A)
+- `apps/documents/` — raw uploaded source files (schema in place; upload flow + extraction land in Phase A/B)
+- `apps/wiki/` — LLM-curated knowledge pages with page-level review status (schema in place; ingest + claim attribution land in Phase A)
 - `apps/` — additional apps planned in Phase A: case templates, surgeon preferences, telemetry
 - `.venv/` — local virtualenv (gitignored)
 - `.env.example` — copy to `.env` to override defaults

@@ -1,8 +1,6 @@
 # OR Prep
 
 > **Scope.** This is a proof-of-concept procedural cognitive prep tool for urology residents, built as a research artifact. A resident inputs a case they are preparing for, and the tool produces a structured 5–20 minute briefing grounded in faculty-reviewed sources, with every claim cited. KU urology residents serve as opt-in beta testers. Deliverables are the system, the design rationale, and beta-use data suitable for publication. This is not a production service and is not clinical decision support.
->
-> **Forked from [`resident_learning_wiki`](https://github.com/nocluetoday/resident_learning_wiki)** at commit `725adc1`. The prior project's educational philosophy work remains as an archived research artifact at that repo.
 
 If you are starting a Claude Code session against this repo, read [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) first.
 
@@ -32,13 +30,13 @@ Not a tutor. Not a question bank. Not a study tool. Not intraoperative guidance.
 
 ## Current state
 
-Inherited from the fork point:
+Standing today:
 - Django scaffold with split settings (`config/settings/{base,dev,prod}.py`); compose with Postgres + backend + frontend; `/api/health/` endpoint returning DB-backed status.
 - JWT auth: custom `User` model (email login, role enum), register/login/refresh/logout/me endpoints, `IsResident`/`IsFaculty`/`IsAdmin` permission classes.
 - Frontend auth flow: login/register pages, protected `/`, `AuthContext` with transparent refresh-on-401.
-- Curriculum/knowledge-base data model: `Module`, `LearningObjective`, `KnowledgeCheck`, `Reference` (in `apps.modules`); `Document` (raw upload schema, in `apps.documents`); `WikiPage` with page-level review status (in `apps.wiki`).
+- Knowledge-base data model: `Module`, `LearningObjective`, `KnowledgeCheck`, `Reference` (in `apps.modules`); `Document` (raw upload schema, in `apps.documents`); `WikiPage` with page-level review status (in `apps.wiki`).
 - `python manage.py import_modules`: idempotent YAML importer for `modules/**/module.yaml`.
-- Two real urology modules (HoLEP/BPH and ethics-in-consent) seed-loaded.
+- Two starter urology modules (HoLEP/BPH and ethics-in-consent) seed-loaded as placeholder content.
 
 Not yet built (Phase A onward):
 - Claim-level source attribution on wiki pages.
@@ -96,7 +94,7 @@ OR Procedural Case Prep.md      Authoritative scope and four-phase plan; read th
 
 ## Deploy
 
-Same as the pivot doc: $20–40/month VPS (Hetzner, DigitalOcean, Linode), Docker Compose with prod settings, Caddy with Let's Encrypt, daily Postgres dump to S3 or Backblaze B2, hostname under a domain Don already owns. No CI/CD beyond a manual deploy script.
+$20–40/month VPS (Hetzner, DigitalOcean, Linode); Docker Compose with prod settings; Caddy with Let's Encrypt; daily Postgres dump to S3 or Backblaze B2; hostname under a domain Don already owns. No CI/CD beyond a manual deploy script.
 
 ## License
 
@@ -113,4 +111,4 @@ KU urology residents are the opt-in beta cohort during Phase C. IRB protocol or 
 - Telemetry first-class — captured before the first beta user touches the system.
 - Correctness over features — a briefing that confidently asserts something incorrect is the worst possible failure mode, because residents use it to prepare for live surgery.
 - No PHI in inputs.
-- No tutor surfaces, no calibration tracking, no commit-before-reveal interactions (those belonged to the prior project and are out of scope here).
+- No tutor surfaces, no calibration tracking, no commit-before-reveal interactions — explicitly out of scope.

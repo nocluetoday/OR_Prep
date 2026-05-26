@@ -1,19 +1,22 @@
 # Project Journal
 
-Carried over from the prior project's discipline. Each entry: date, what changed, why, and what the next decision point is.
+Design decisions, blockers, and rationale. Each entry: date, what changed, why, and the next decision point.
 
-## 2026-05-26 — Fork from `resident_learning_wiki` at `725adc1`
+## 2026-05-26 — Project initialization
 
-The prior project (a learning-mode AI tutor for residents) is archived as Project 1, a research artifact whose educational philosophy doc remains potentially publishable. This project (Project 2) starts from the prior project's codebase at commit `725adc1` and discards the tutor surface in favor of a procedural case-prep briefing tool. Full rationale in [`OR Procedural Case Prep.md`](../OR%20Procedural%20Case%20Prep.md).
+Repo stood up with the goal stated in [`OR Procedural Case Prep.md`](../OR%20Procedural%20Case%20Prep.md): a procedural cognitive prep tool for KU urology residents that produces a structured 5–20 minute briefing from a small structured input, with every claim cited to a reviewed source.
 
-**Fork mechanics.** Manual clone with fresh git history. `git archive` from the prior repo extracted tracked files into a new directory; tutor-specific docs (`docs/architecture.md`, `docs/educational-philosophy.md`, `docs/project-vision.md`, `docs/resident-workflow.md`, `docs/roadmap.md`, `docs/system-architecture.md`, `docs/topic-selection-and-learning-plans.md`, `docs/module-authoring.md`), prompts (`prompts/ai-tutor-system-prompt.md`), governance/safety, faculty workflow, rubrics, examples, and the tutor progress schema (`schemas/progress.schema.yaml`) were dropped. The Django app code, frontend auth flow, Docker stack, wiki/document/module models, and inherited urology module content all carry forward.
+**Stack chosen.** Django 5.2 + DRF + Postgres + Docker on the backend; Vite + React + TypeScript on the frontend; JWT auth via `djangorestframework-simplejwt`; `django-simple-history` for row-level audit on every model. The deployment target is a single VPS with Docker Compose + Caddy.
 
-**What stayed in Project 1.** Educational philosophy doc, tutor system prompt, governance/safety doc, four-phase pre-pivot roadmap. The prior repo is being marked archived with a link forward to this repo.
+**Knowledge layer shape.** Three layers: raw uploaded sources (`apps.documents`), LLM-curated wiki pages with page-level review status (`apps.wiki`), and the schema/template content in `modules/` (loaded into `apps.modules` via the `import_modules` management command). The briefing generator reads the case template + relevant published wiki claims + surgeon preferences directly into the LLM context. No vector store, no embeddings — topic-scoped at request time.
 
-**Next decision point.** Phase A: how to model case templates and surgeon preferences against the inherited Module/WikiPage schema. Two reasonable shapes:
-1. Extend `Module` with a `case_template` JSONField and add a `SurgeonPreference` model FK'd to Module.
-2. Introduce a separate `CaseTemplate` model, leave `Module` as legacy, migrate the two inherited urology modules into the new shape.
+**What's running today.** Auth flow (register / login / refresh / logout / me + role-permission classes); the four-app data model (`users`, `modules`, `documents`, `wiki`); the YAML importer with two starter urology modules (HoLEP/BPH and ethics-in-consent) seeded as placeholder content; the dev compose stack with Postgres + backend + frontend.
 
-Option 2 is cleaner but adds migration work. Decision deferred until the first Phase A claim-attribution piece is being designed, because it constrains how the briefing-generation LLM prompt assembles its context.
+**Next decision point.** Phase A: how to model case templates and surgeon preferences against the current `Module` / `WikiPage` schema. Two shapes:
 
-**Open questions tracked against OR Procedural Case Prep Phase C blockers.** IRB amendment, authorship plan, beta cohort confirmation, domain name, Anthropic spend-alert mechanism, attending-preferences consent process. None block Phase A start.
+1. Extend `Module` with a `case_template` JSONField and add a `SurgeonPreference` model FK'd to `Module`.
+2. Introduce a separate `CaseTemplate` model, keep `Module` as legacy, migrate the two starter modules into the new shape.
+
+Option 2 is cleaner but adds migration work. Decision deferred until the first Phase A claim-attribution piece is being designed, because that constrains how the briefing-generation LLM prompt assembles its context.
+
+**Open questions tracked against `OR Procedural Case Prep.md` Phase C blockers.** IRB protocol approval, authorship plan with the chair, beta cohort confirmation, domain name + DNS, Anthropic API spend-alert mechanism, attending-preferences consent process. None block Phase A start.

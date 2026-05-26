@@ -1,6 +1,6 @@
 # Codebase Map
 
-Inherited from the fork (commit `725adc1` of `resident_learning_wiki`). Tutor-specific docs, prompts, governance, faculty, rubrics, and examples were not carried over; the codebase itself is shared with the prior project as scaffold.
+Top-down view of the repo. For per-area conventions see the CLAUDE.md inside each subdirectory.
 
 ## Top level
 
@@ -86,15 +86,15 @@ modules/
   catalog.yaml               Top-level module catalog
   _template/                 Authoring template for new modules
   urology/
-    bph/module.yaml          BPH/LUTS evaluation case (inherited)
-    ethics-in-consent/       Consent + disclosure case (inherited)
+    bph/module.yaml          BPH/LUTS evaluation case (starter)
+    ethics-in-consent/       Consent + disclosure case (starter)
 
 schemas/
   module.schema.yaml         YAML schema for module files
   catalog.schema.yaml        YAML schema for catalog
 ```
 
-The inherited modules are placeholder content. Phase A replaces them with case-template-shaped content (HoLEP, URS for stone, etc.) plus surgeon preferences for Don's HoLEP approach.
+The starter modules are placeholder content. Phase A replaces them with case-template-shaped content (HoLEP, URS for stone, etc.) plus surgeon preferences for Don's HoLEP approach.
 
 ## Runtime user data (not committed)
 

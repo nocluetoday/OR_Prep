@@ -15,12 +15,6 @@ Not a tutor. Not a question bank. Not a study tool. A case-prep tool.
 - Outputs: working demo, design rationale, telemetry data, paper, conference abstract.
 - Telemetry is first-class. Captured before the first beta user touches the system.
 
-## How this project relates to the prior repo
-
-The prior repo (`resident_learning_wiki`) is forked, not deleted. Treat it as Project 1, archived as a research artifact. The educational philosophy doc remains publishable. The new repo (this one) starts from the prior repo's codebase but discards the tutor surface and learn-it/look-it-up framing.
-
-**Forked from `resident_learning_wiki` at commit `725adc1`.** Archive note added to the prior repo's README pointing here.
-
 ## Hard requirements
 
 1. **Open source, MIT.** No proprietary dependencies blocking redistribution. Anthropic API is acceptable.
@@ -39,30 +33,10 @@ Do not build, do not plan for:
 - Multi-tenancy or multi-program support.
 - SSO/SAML, password reset, transactional email.
 - Mobile native apps (mobile web is acceptable if it falls out naturally).
-- A tutor surface, learn-it mode, calibration tracking, commit-before-reveal interactions. These belonged to the prior project.
+- Tutor surfaces, learn-it mode, calibration tracking, commit-before-reveal interactions. Out of scope.
 - Generalization to non-urology specialties in the PoC. Endourology first, broader urology only if author bandwidth exists.
 - Real-time intraoperative anything. The tool is used before the OR, not in it.
 - Production hardening beyond a single VPS.
-
-## What carries over from the prior repo
-
-Keep:
-
-- Django + DRF + React + Vite + Postgres + Docker scaffold.
-- JWT auth flow.
-- Wiki schema and YAML importer (the wiki is now the knowledge base behind briefings, not a tutor's reference).
-- The two existing urology modules' content.
-- `django-simple-history` audit logging.
-- The "no RAG, no embeddings" position. A single case-prep request loads only the relevant module(s) and surgeon-preference data into context. Topic-scoped, not corpus-scoped.
-
-## What to discard from the prior repo
-
-Delete or strip out:
-
-- The tutor app's commit-before-reveal logic, hint escalation, calibration tracking. These were Phase B of the prior plan and were not yet built; if any scaffolding exists, remove it.
-- The educational-philosophy doc as a design constraint. It remains in the prior repo as an archived research artifact and may still be publishable. It does not constrain this project's design.
-- Any references to "learn-it mode" or "look-it-up mode" in code, docs, schema, or UI.
-- The roadmap doc and PROJECT_PIVOT.md from the prior repo. Replace with this doc.
 
 ## Core design
 
@@ -108,30 +82,28 @@ Output is structured (JSON, then rendered to markdown UI). The model calls a `ci
 
 ### Knowledge base structure
 
-The wiki schema from the prior repo is extended with two new content types:
+Two content types anchor the knowledge base:
 
 - **Case templates.** One per case type. Define the briefing skeleton, the decision points typically encountered, the complication patterns. Authored by Don.
 - **Surgeon preferences.** Structured per surgeon, per case type. E.g., "Neff's HoLEP preferences: starts with median lobe if present; uses 100W MOSES; specific approach to apex." Each preference is a structured claim with its own source (which may be "Neff personal preference, documented [date]" rather than a literature citation).
 
 Surgeon preferences are opt-in per attending. Ship with Neff's preferences for HoLEP only in v1. Other KU attendings can be added later if they consent and contribute content.
 
-## The four-phase plan (revised)
+## The four-phase plan
 
 ### Phase A: Correctness layer + knowledge base extension
 
-Carries forward most of the prior Phase A. Extensions:
-
-1. **Claim-level source attribution.** Same as prior plan.
-2. **Ingest pipeline with adversarial audit.** Same as prior plan.
-3. **Citation as a validated tool call.** Same as prior plan.
-4. **Page version pinning in citations.** Same as prior plan.
-5. **Source freshness metadata.** Same as prior plan.
-6. **Case template schema.** New. One template per case type, defining briefing structure.
-7. **Surgeon preference schema.** New. Structured preferences attributable to a named surgeon, with date and review status.
+1. **Claim-level source attribution.** Every wiki claim carries the source it came from with enough context to resolve back to a source span.
+2. **Ingest pipeline with adversarial audit.** Uploaded sources go through extraction, claim formation, and an audit pass that flags weak or unsupported attributions before the content is publishable.
+3. **Citation as a validated tool call.** The briefing-generation LLM calls a `cite(claim_id)` tool; the server validates each call against the wiki and strips or flags claims without valid citations.
+4. **Page version pinning in citations.** Citations reference a specific wiki page version so later edits do not silently invalidate prior briefings.
+5. **Source freshness metadata.** Each source carries a date and a review status the briefing renderer can surface ("most recent review: 2024-08").
+6. **Case template schema.** One template per case type, defining briefing structure.
+7. **Surgeon preference schema.** Structured preferences attributable to a named surgeon, with date and review status.
 
 **Demonstrable artifact:** CLI command that produces a briefing for "HoLEP, 80g prostate, on warfarin, attending Neff, 10 minutes available" using validated citations end-to-end.
 
-**Estimated effort:** 3-4 weeks. Slightly longer than the prior Phase A because of the new schemas.
+**Estimated effort:** 3-4 weeks.
 
 ### Phase B: Briefing surface
 
@@ -146,7 +118,7 @@ Carries forward most of the prior Phase A. Extensions:
 
 ### Phase C: Beta and post-case debrief
 
-1. **Minimal deploy.** Single VPS, Docker Compose, Caddy + Let's Encrypt, daily Postgres dump. Same as prior plan.
+1. **Minimal deploy.** Single VPS, Docker Compose, Caddy + Let's Encrypt, daily Postgres dump.
 2. **Post-case debrief form.** After the resident's case is done, optional follow-up: "Did the briefing match what actually happened? Was anything missing? Was anything wrong?" Three short text fields plus a 1-5 usefulness rating.
 3. **Telemetry dashboard.** Read-only admin view showing briefing counts, case type distribution, citation validity rates, debrief feedback.
 4. **Recruit 3-5 KU urology residents.** Personal asks. Set expectations: this is research, you may find errors, please report them via debrief, your data will be analyzed and possibly published in de-identified form.
@@ -196,7 +168,7 @@ All tables get `exported_at` to track research data exports. A management comman
 - A briefing request loads ~20-40k input tokens (module YAML + surgeon prefs + relevant wiki claims + system prompt) and produces ~2-5k output tokens.
 - At current Claude Sonnet pricing, that's roughly $0.10-0.30 per briefing.
 - Use Anthropic prompt caching for the static parts (module YAML, system prompt). Should cut per-briefing cost substantially.
-- Ingest cost is the same as the prior plan: $2-5 per document.
+- Ingest cost: $2-5 per document.
 
 **Implication:** with 5 beta testers doing 2 briefings per week, ~$5-15/month on briefings. Comfortably within budget. Bursty ingest weeks (heavy authoring) could be $100-200; still fine.
 
@@ -210,8 +182,6 @@ Model selection: Claude Sonnet (`claude-sonnet-4-5`) for briefings. Opus is over
 
 ## Deployment for the demo
 
-Same as the prior plan:
-
 - $20-40/month VPS (Hetzner, DigitalOcean, Linode).
 - Docker Compose, prod settings.
 - Caddy or nginx with Let's Encrypt.
@@ -220,27 +190,17 @@ Same as the prior plan:
 
 No CI/CD beyond a manual deploy script. One-paragraph deploy story in the README.
 
-## README content for the new repo
-
-Replace the prior README. Top section:
-
-> **Scope.** This is a proof-of-concept procedural cognitive prep tool for urology residents, built as a research artifact. A resident inputs a case they are preparing for, and the tool produces a structured 5-20 minute briefing grounded in faculty-reviewed sources, with every claim cited. KU urology residents serve as opt-in beta testers. Deliverables are the system, the design rationale, and beta-use data suitable for publication. This is not a production service and is not clinical decision support.
->
-> **Forked from `resident_learning_wiki`** at commit `725adc1`. The prior project's educational philosophy work remains as an archived research artifact at that repo.
-
-Architecture section, local dev instructions, deploy story, citation of any preprint, license.
-
 ## Research and publication posture
 
-- **Pre-register on OSF.** New registration for this project, separate from the prior project. Describe data captured, analytical plan, success criteria for the PoC.
-- **IRB.** New protocol, or an amendment to the prior protocol if one was filed. The data captured here (case characteristics, briefing content, debrief feedback) is different from the prior project. Talk to IRB before the first beta briefing is generated.
+- **Pre-register on OSF.** Describe data captured, analytical plan, success criteria for the PoC.
+- **IRB.** Protocol required before the first beta briefing is generated. The data captured here is case characteristics, briefing content, and debrief feedback. Talk to IRB before the first beta briefing is generated.
 - **Authorship plan.** Settle with the chair and any KU attending contributing surgeon-preference content. Residents who substantially contribute to design or data interpretation are coauthors.
 - **Data sharing.** De-identified data releasable alongside the paper.
 - **Target venues.** *Journal of Surgical Education* primary. *Surgery*, *Academic Medicine*, *JAMA Network Open*, *JMIR Medical Education* as alternatives. AUA Education and Research subsection abstract. Endourology Society if the talk fits.
 
 ## Project journal
 
-Carry over the journaling discipline from the prior project. New file `docs/journal.md` in the new repo. First entry should document the fork decision and rationale.
+`docs/journal.md` tracks design decisions, blockers, and rationale. Each entry: date, what changed, why, and what the next decision point is.
 
 ## Definitions of done
 
@@ -259,18 +219,18 @@ Break this plan if:
 - Phase A audit pass cannot reliably catch weak attributions (false negative rate too high). The architecture is wrong; rethink before Phase B.
 - Beta debriefs in Phase C flag a correctness incident. Stop, diagnose, patch the audit pass, do not move to D until fixed.
 - Cost projections at observed Phase C usage exceed $300/month. Redesign before opening to more users.
-- After three resident validation conversations, none of them say they'd use the tool. Don't fork. Stay with Project 1.
+- After three resident validation conversations, none of them say they'd use the tool. Stop and reconsider scope.
 
 Do not break this plan for:
 
 - Feature requests outside the four phases.
 - Architecture "improvements" without demonstrated need.
 - Preparation for scale.
-- Pull toward becoming a tutor again. The educational philosophy belongs to Project 1.
+- Pull toward becoming a tutor. Tutor surfaces and learn-it / commit-before-reveal interactions are out of scope.
 
 ## Open questions to resolve before Phase C
 
-- IRB protocol or amendment approval.
+- IRB protocol approval.
 - Authorship plan with chair and any contributing attendings.
 - Confirmed beta cohort and time commitment.
 - Domain name and DNS.
@@ -281,6 +241,4 @@ Do not break this plan for:
 
 Paste this at the top of any new Claude Code session working on this repo:
 
-> Read `PROJECT_PIVOT_2.md` first. This project is a proof-of-concept procedural cognitive prep tool for urology residents, not a tutor. The user inputs a case, the tool produces a structured briefing with cited sources. Adoption is not a goal. Optimize for correctness, demonstrability, and research output. Telemetry is first-class. Single instance, single specialty, MIT, ~$1000/month all-in budget. Forked from `resident_learning_wiki`. Do not propose tutor surfaces, learn-it modes, calibration tracking, adoption mechanics, multi-tenancy, or production hardening beyond a single VPS unless I explicitly ask.
-
-End of pivot doc.
+> Read `OR Procedural Case Prep.md` first. This is a proof-of-concept procedural cognitive prep tool for urology residents, not a tutor. The user inputs a case, the tool produces a structured briefing with cited sources. Adoption is not a goal. Optimize for correctness, demonstrability, and research output. Telemetry is first-class. Single instance, single specialty, MIT, ~$1000/month all-in budget. Do not propose tutor surfaces, learn-it modes, calibration tracking, adoption mechanics, multi-tenancy, or production hardening beyond a single VPS unless I explicitly ask.
