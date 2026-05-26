@@ -6,7 +6,7 @@ A tool that takes a resident's input about a case they're about to do and produc
 
 Not a tutor. Not a question bank. Not a study tool. A case-prep tool.
 
-## Posture (unchanged from PROJECT_PIVOT)
+## Posture
 
 - Proof of concept and research artifact. Adoption is not the goal.
 - Open source, MIT.
