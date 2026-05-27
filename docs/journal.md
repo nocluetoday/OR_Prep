@@ -72,3 +72,43 @@ Option 2 is cleaner but adds migration work. Decision deferred until the first P
 - OCR fallback for image-only PDFs. `pypdf` returns garbage; either add `pdfplumber + tesseract`, or use Anthropic's vision input on the PDF directly (probably the cleaner path).
 - Whether the per-claim audit should be one batched call (cheap) or N independent calls (strict). Test both on the first real document; pick by verdict quality, not cost.
 - The prior-content-as-HTML-comment behaviour in re-ingest is redundant with simple-history. Drop it once admin merge UX gets real use; keeping for now so faculty can eyeball the diff inline without flipping to history.
+
+## 2026-05-26 — Provider abstraction (chunk 1)
+
+**Motivation.** User wants local-model support via LM Studio, plus a clean path to OpenAI and OpenRouter. Lock-in to the Anthropic SDK in `apps.wiki.services.anthropic_client` would have made any of those a per-call branch; better to introduce a thin provider interface now while there are only two callers (ingest + briefing) to update.
+
+**Shape.** New module `apps.wiki.services.providers/` with:
+
+- `base.py` — provider-agnostic dataclasses (`Message`, `ToolSpec`, `ToolCall`, `ToolResult`, `CompletionResponse`, `Usage`) and the `Provider` ABC. Stop reasons normalized to four values: `end`, `tool_use`, `max_tokens`, `error`. `json_mode` is a hint applied only by providers that support `response_format`; Anthropic ignores it (prompt instructs JSON shape).
+- `anthropic.py` — wraps `anthropic.Anthropic`. Native Claude pricing table for cost estimation. Translates Message ↔ Anthropic content blocks (text / tool_use / tool_result).
+- `openai_compat.py` — one class for OpenAI, LM Studio, and OpenRouter. The three speak the same wire format; differences are `base_url`, the env var holding the API key (with a sentinel fallback for LM Studio), and pricing (OpenAI: local table; LM Studio: free; OpenRouter: not estimated locally because per-model pricing varies — the API returns actual cost in `usage`, which we don't surface yet).
+- `registry.py` — `get_provider(kind)` dispatches to one of the four kinds; raises `ProviderConfigurationError` for unknown values.
+
+**Settings.** Each pipeline stage has its own provider + model:
+
+- `LLM_BRIEFING_PROVIDER` / `LLM_BRIEFING_MODEL`
+- `LLM_INGEST_PROPOSE_PROVIDER` / `LLM_INGEST_PROPOSE_MODEL`
+- `LLM_INGEST_AUDIT_PROVIDER` / `LLM_INGEST_AUDIT_MODEL`
+- `LLM_INGEST_COMPOSE_PROVIDER` / `LLM_INGEST_COMPOSE_MODEL`
+
+Defaults: all `anthropic`, Sonnet 4.6 everywhere except audit (Opus 4.7). The old `ANTHROPIC_BRIEFING_MODEL` / `ANTHROPIC_INGEST_MODEL` / `ANTHROPIC_AUDIT_MODEL` env vars are honored as defaults for the new `LLM_*_MODEL` values so existing `.env` files keep working with no change.
+
+**Provider config:** `OPENAI_API_KEY` / `OPENAI_BASE_URL`; `LMSTUDIO_API_KEY` (defaults to the sentinel string `lm-studio`) / `LMSTUDIO_BASE_URL` (defaults to `http://localhost:1234/v1`); `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL`.
+
+**Refactor.** `apps.wiki.services.ingest` and `apps.cases.services.briefing` no longer import an SDK directly. Each pass (propose, audit, compose) takes a `Provider` instance and calls `provider.complete(...)`. The briefing tool-use loop is now provider-agnostic — assistant turns carry `tool_calls`, user turns carry `tool_results`, each provider translates to its native wire format. Deleted `apps.wiki.services.anthropic_client` and its `AnthropicConfigurationError`; callers now catch `ProviderConfigurationError` from the providers package.
+
+**Smoke-tested:** missing-key paths fire the correct `ProviderConfigurationError` for both ingest and briefing under the default anthropic provider; switching `LLM_BRIEFING_PROVIDER=lmstudio` with a bogus base URL produces a network connection error (the provider is actually instantiated and called — the abstraction works end-to-end). `IngestRun` rows capture the per-stage model names.
+
+**Known trade-offs:**
+
+- Briefing tool-use loops need providers that support function calling. Most local models loaded in LM Studio do not. If a user routes briefing to LM Studio with a non-tool-using model, the loop will exit with all factual statements going through the LLM's text content (no validated cites). The `rejected_cites` footer in the output will be empty (the model never tried to cite), but the briefing will still be unsupported. Document the gotcha; better diagnostic is deferred work.
+- `response_format={"type": "json_object"}` is disabled when tools are in use because some backends reject the combo. Ingest passes don't use tools, so JSON mode applies there; briefing uses tools, so no JSON mode (briefing doesn't need it — outputs are markdown).
+- **Model-name silent-stick when swapping providers.** Existing `.env` files with only `ANTHROPIC_BRIEFING_MODEL=claude-sonnet-4-6` set will keep that as the default for `LLM_BRIEFING_MODEL` even if `LLM_BRIEFING_PROVIDER` is swapped to e.g. `lmstudio`. LM Studio will then reject the model name. When swapping a stage's provider, always also set its `LLM_*_MODEL` env var to a model the new backend knows.
+
+**Chunk 2 (deferred):**
+
+- OpenRouter cost-from-response: parse `usage.cost` (when present) instead of returning 0.0 from the local pricing table.
+- LM Studio tool-use probe: at startup, query the loaded model's capabilities and warn before routing briefing to it.
+- Per-CaseTemplate provider override so high-stakes cases can pin Anthropic while exploratory cases can use cheap local models.
+- Prompt caching for Anthropic (deferred from earlier; still relevant).
+- Settings UI in admin so non-engineers can swap providers without editing env files.

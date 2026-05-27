@@ -44,8 +44,8 @@ from apps.wiki.models import (
     WikiPage,
     WikiPageStatus,
 )
-from apps.wiki.services.anthropic_client import AnthropicConfigurationError
 from apps.wiki.services.ingest import extract_text, run_ingest
+from apps.wiki.services.providers import ProviderConfigurationError
 
 
 VERDICT_TO_STATUS = {
@@ -131,9 +131,9 @@ class Command(BaseCommand):
             run = IngestRun.objects.create(
                 source_document=doc,
                 ingested_by=uploader,
-                model_propose=settings.ANTHROPIC_INGEST_MODEL,
-                model_audit=settings.ANTHROPIC_AUDIT_MODEL,
-                model_compose=settings.ANTHROPIC_INGEST_MODEL,
+                model_propose=settings.LLM_INGEST_PROPOSE_MODEL,
+                model_audit=settings.LLM_INGEST_AUDIT_MODEL,
+                model_compose=settings.LLM_INGEST_COMPOSE_MODEL,
                 status=IngestRunStatus.RUNNING,
             )
 
@@ -155,7 +155,7 @@ class Command(BaseCommand):
                 page_title=f"{case_template.title} — {opts['wiki_page_path']}",
                 page_topic=opts["wiki_page_path"],
             )
-        except AnthropicConfigurationError as e:
+        except ProviderConfigurationError as e:
             self._mark_failed(doc, run, str(e))
             raise CommandError(str(e)) from e
         except Exception as e:

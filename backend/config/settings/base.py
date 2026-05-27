@@ -101,21 +101,45 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # via env var so the read-only bind mount is the source.
 MODULES_DIR = env("MODULES_DIR", default=str((BASE_DIR.parent / "modules").resolve()))
 
-# Anthropic SDK configuration. Read by ingest + briefing services. Both raise a
-# clear error when ANTHROPIC_API_KEY is unset rather than silently failing.
+# LLM provider configuration.
+#
+# Each pipeline stage (briefing, ingest propose, ingest adversarial audit, ingest
+# compose) has its own provider + model setting so different stages can run on
+# different backends — e.g. local LM Studio for ingest propose to keep cost down,
+# Anthropic Opus for the audit pass for strictness. Provider kinds: anthropic,
+# openai, lmstudio, openrouter. See apps.wiki.services.providers.
+#
+# Backwards compat: the older ANTHROPIC_BRIEFING_MODEL / ANTHROPIC_INGEST_MODEL /
+# ANTHROPIC_AUDIT_MODEL env vars are still honored as defaults for the new
+# LLM_*_MODEL settings, so existing .env files keep working.
+
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
-ANTHROPIC_BRIEFING_MODEL = env(
-    "ANTHROPIC_BRIEFING_MODEL",
-    default="claude-sonnet-4-6",
-)
-ANTHROPIC_INGEST_MODEL = env(
-    "ANTHROPIC_INGEST_MODEL",
-    default="claude-sonnet-4-6",
-)
-ANTHROPIC_AUDIT_MODEL = env(
-    "ANTHROPIC_AUDIT_MODEL",
-    default="claude-opus-4-7",
-)
+
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+OPENAI_BASE_URL = env("OPENAI_BASE_URL", default="https://api.openai.com/v1")
+
+# LM Studio runs locally; accepts any non-empty API key (we default to a
+# sentinel string). Override LMSTUDIO_BASE_URL when the server is on a
+# different port / host.
+LMSTUDIO_API_KEY = env("LMSTUDIO_API_KEY", default="lm-studio")
+LMSTUDIO_BASE_URL = env("LMSTUDIO_BASE_URL", default="http://localhost:1234/v1")
+
+OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", default="")
+OPENROUTER_BASE_URL = env("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
+
+_LEGACY_BRIEFING_MODEL = env("ANTHROPIC_BRIEFING_MODEL", default="claude-sonnet-4-6")
+_LEGACY_INGEST_MODEL = env("ANTHROPIC_INGEST_MODEL", default="claude-sonnet-4-6")
+_LEGACY_AUDIT_MODEL = env("ANTHROPIC_AUDIT_MODEL", default="claude-opus-4-7")
+
+LLM_BRIEFING_PROVIDER = env("LLM_BRIEFING_PROVIDER", default="anthropic")
+LLM_INGEST_PROPOSE_PROVIDER = env("LLM_INGEST_PROPOSE_PROVIDER", default="anthropic")
+LLM_INGEST_AUDIT_PROVIDER = env("LLM_INGEST_AUDIT_PROVIDER", default="anthropic")
+LLM_INGEST_COMPOSE_PROVIDER = env("LLM_INGEST_COMPOSE_PROVIDER", default="anthropic")
+
+LLM_BRIEFING_MODEL = env("LLM_BRIEFING_MODEL", default=_LEGACY_BRIEFING_MODEL)
+LLM_INGEST_PROPOSE_MODEL = env("LLM_INGEST_PROPOSE_MODEL", default=_LEGACY_INGEST_MODEL)
+LLM_INGEST_AUDIT_MODEL = env("LLM_INGEST_AUDIT_MODEL", default=_LEGACY_AUDIT_MODEL)
+LLM_INGEST_COMPOSE_MODEL = env("LLM_INGEST_COMPOSE_MODEL", default=_LEGACY_INGEST_MODEL)
 
 # Per-resident daily briefing cap; the briefing command refuses to run further
 # requests for a user once they hit this number on a given day.

@@ -83,7 +83,7 @@ Definitions of done and the "when to break the plan" criteria live in [OR Proced
 
 ## Running it locally
 
-You need Docker, or Python 3.13 + Node 20+ for the native path. The Phase A ingest and briefing CLIs require an Anthropic API key in `ANTHROPIC_API_KEY` (`backend/.env` for native dev, `docker/.env` for compose). Both commands fail loudly when the key is unset.
+You need Docker, or Python 3.13 + Node 20+ for the native path. The Phase A ingest and briefing CLIs route through a provider abstraction (`apps.wiki.services.providers`) that supports `anthropic`, `openai`, `lmstudio`, and `openrouter`. Default config uses Anthropic; set the matching API key in `backend/.env` (native) or `docker/.env` (compose). To swap any pipeline stage to a different backend, set the matching `LLM_*_PROVIDER` + `LLM_*_MODEL` env vars (see `backend/.env.example`). LM Studio runs locally on `http://localhost:1234/v1` by default and is treated as free; briefing tool-use on local models depends on whether the loaded model supports function calling.
 
 ### Docker (preferred)
 

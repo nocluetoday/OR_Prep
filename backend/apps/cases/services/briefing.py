@@ -1,12 +1,16 @@
 """Briefing generation service.
 
-Loads the relevant CaseTemplate, SurgeonPreference rows, and published Claims into
-context for a single LLM call. The LLM is required to call the `cite(claim_id)`
-tool for every factual claim it makes; the server validates each call against
-the DB and pins the citation to the WikiPage's current history_id so later
-edits do not silently invalidate the prior briefing.
+Loads the relevant CaseTemplate, SurgeonPreference rows, and published Claims
+into context for a single tool-use loop. The LLM is required to call the
+`cite(claim_id)` tool for every factual claim it makes; the server validates
+each call against the DB and pins the citation to the WikiPage's current
+history_id so later edits do not silently invalidate the prior briefing.
 
-This is the structural heart of Phase A. Telemetry persistence is Phase B.
+Provider-agnostic — runs on any backend the registry knows (Anthropic, OpenAI,
+LM Studio, OpenRouter). Briefing-time tool-use reliability on local models is
+model-dependent; if a loaded LM Studio model doesn't support tools, the loop
+will exit immediately with rejected_cites for any inline statements the model
+made without going through `cite`.
 """
 
 from __future__ import annotations
@@ -17,8 +21,15 @@ from dataclasses import dataclass, field
 from django.conf import settings
 
 from apps.cases.models import CaseTemplate, SurgeonPreference
-from apps.wiki.models import Claim, ClaimAuditStatus, WikiPage
-from apps.wiki.services.anthropic_client import estimate_cost_usd, get_client
+from apps.wiki.models import Claim, ClaimAuditStatus
+from apps.wiki.services.providers import (
+    Message,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
+    Usage,
+    get_provider,
+)
 
 
 BRIEFING_SYSTEM_PROMPT = """You produce structured cognitive prep briefings for urology
@@ -48,14 +59,14 @@ list of published Claims (with their claim_ids and statements). Cite by id.
 """
 
 
-CITE_TOOL_SCHEMA = {
-    "name": "cite",
-    "description": (
+CITE_TOOL_SPEC = ToolSpec(
+    name="cite",
+    description=(
         "Validate and pin a citation to a published Claim. Call this for every "
         "factual statement in the briefing. The server returns either a "
         "validated citation object or an error (claim not found / not published)."
     ),
-    "input_schema": {
+    input_schema={
         "type": "object",
         "properties": {
             "claim_id": {
@@ -65,7 +76,7 @@ CITE_TOOL_SCHEMA = {
         },
         "required": ["claim_id"],
     },
-}
+)
 
 
 @dataclass
@@ -90,11 +101,10 @@ class BriefingResult:
     tokens_out: int = 0
     cost_usd: float = 0.0
     model: str = ""
+    provider: str = ""
 
 
 def _load_publishable_claims(case_template: CaseTemplate) -> dict[str, Claim]:
-    """Return the published claims for this case template, keyed by claim_id."""
-
     qs = (
         Claim.objects.filter(
             wiki_page__case_template=case_template,
@@ -133,21 +143,18 @@ def _serialize_case_template(case_template: CaseTemplate) -> dict:
 
 def _serialize_surgeon_preferences(prefs: list[SurgeonPreference]) -> list[dict]:
     return [
-        {
-            "surgeon_email": p.surgeon.email,
-            "preferences": p.preferences,
-        }
+        {"surgeon_email": p.surgeon.email, "preferences": p.preferences}
         for p in prefs
     ]
 
 
-def _resolve_cite(claim_id: str, claims_by_id: dict[str, Claim]) -> tuple[ValidatedCitation | None, str | None]:
+def _resolve_cite(
+    claim_id: str, claims_by_id: dict[str, Claim]
+) -> tuple[ValidatedCitation | None, str | None]:
     claim = claims_by_id.get(claim_id)
     if claim is None:
         return None, "no published claim with that claim_id"
     page = claim.wiki_page
-    # Pin to the page's current history version so later edits do not silently
-    # invalidate the briefing.
     latest_page_history = page.history.first()
     latest_claim_history = claim.history.first()
     return (
@@ -192,95 +199,99 @@ def generate_briefing(
         "available_claims": _serialize_claims_for_prompt(claims_by_id),
     }
 
-    client = get_client()
-    model = settings.ANTHROPIC_BRIEFING_MODEL
+    provider = get_provider(settings.LLM_BRIEFING_PROVIDER)
+    model = settings.LLM_BRIEFING_MODEL
 
-    messages = [{"role": "user", "content": json.dumps(user_payload)}]
-    tokens_in = tokens_out = 0
+    messages: list[Message] = [Message(role="user", text=json.dumps(user_payload))]
+    cited_ids: set[str] = set()
     validated: list[ValidatedCitation] = []
     rejected: list[dict] = []
-    cited_ids: set[str] = set()
-    final_text = ""
+    final_text_parts: list[str] = []
+    totals = Usage()
+    model_reported = model
 
-    # Iterate the tool-use loop; cap at a generous bound so a buggy prompt
-    # cannot pin a runaway conversation.
     for _ in range(8):
-        msg = client.messages.create(
+        response = provider.complete(
             model=model,
-            max_tokens=8192,
             system=BRIEFING_SYSTEM_PROMPT,
-            tools=[CITE_TOOL_SCHEMA],
             messages=messages,
+            tools=[CITE_TOOL_SPEC],
+            max_tokens=8192,
         )
-        tokens_in += msg.usage.input_tokens
-        tokens_out += msg.usage.output_tokens
+        totals.input_tokens += response.usage.input_tokens
+        totals.output_tokens += response.usage.output_tokens
+        model_reported = response.model or model
 
-        assistant_blocks: list[dict] = []
-        tool_results: list[dict] = []
+        if response.text:
+            final_text_parts.append(response.text)
 
-        for block in msg.content:
-            if block.type == "text":
-                assistant_blocks.append({"type": "text", "text": block.text})
-                final_text += block.text
-            elif block.type == "tool_use" and block.name == "cite":
-                assistant_blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    }
-                )
-                claim_id = str(block.input.get("claim_id", "")).strip()
-                citation, error = _resolve_cite(claim_id, claims_by_id)
-                if citation is not None:
-                    if claim_id not in cited_ids:
-                        validated.append(citation)
-                        cited_ids.add(claim_id)
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": json.dumps(
-                                {
-                                    "ok": True,
-                                    "claim_id": citation.claim_id,
-                                    "statement": citation.statement,
-                                    "source_citation": citation.source_citation,
-                                    "source_date": citation.source_date,
-                                    "page_history_id": citation.page_history_id,
-                                }
-                            ),
-                        }
-                    )
-                else:
-                    rejected.append({"claim_id": claim_id, "reason": error})
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "is_error": True,
-                            "content": json.dumps({"ok": False, "reason": error}),
-                        }
-                    )
-
-        if assistant_blocks:
-            messages.append({"role": "assistant", "content": assistant_blocks})
-        if tool_results:
-            messages.append({"role": "user", "content": tool_results})
-
-        if msg.stop_reason != "tool_use":
+        if not response.tool_calls:
             break
 
-    markdown = _render_markdown(final_text, validated, rejected)
+        # Echo the assistant's turn back into the conversation so the model sees
+        # the prior tool_use blocks on the next call (required by both Anthropic
+        # and OpenAI-compatible providers).
+        messages.append(
+            Message(role="assistant", text=response.text, tool_calls=response.tool_calls)
+        )
+
+        tool_results: list[ToolResult] = []
+        for tc in response.tool_calls:
+            if tc.name != "cite":
+                tool_results.append(
+                    ToolResult(
+                        tool_call_id=tc.id,
+                        content=json.dumps({"ok": False, "reason": f"unknown tool: {tc.name}"}),
+                        is_error=True,
+                    )
+                )
+                continue
+            claim_id = str(tc.input.get("claim_id", "")).strip()
+            citation, error = _resolve_cite(claim_id, claims_by_id)
+            if citation is not None:
+                if claim_id not in cited_ids:
+                    validated.append(citation)
+                    cited_ids.add(claim_id)
+                tool_results.append(
+                    ToolResult(
+                        tool_call_id=tc.id,
+                        content=json.dumps(
+                            {
+                                "ok": True,
+                                "claim_id": citation.claim_id,
+                                "statement": citation.statement,
+                                "source_citation": citation.source_citation,
+                                "source_date": citation.source_date,
+                                "page_history_id": citation.page_history_id,
+                            }
+                        ),
+                    )
+                )
+            else:
+                rejected.append({"claim_id": claim_id, "reason": error})
+                tool_results.append(
+                    ToolResult(
+                        tool_call_id=tc.id,
+                        content=json.dumps({"ok": False, "reason": error}),
+                        is_error=True,
+                    )
+                )
+
+        messages.append(Message(role="user", tool_results=tool_results))
+
+        if response.stop_reason != "tool_use":
+            break
+
+    markdown = _render_markdown("".join(final_text_parts), validated, rejected)
     return BriefingResult(
         markdown=markdown,
         citations=validated,
         rejected_cites=rejected,
-        tokens_in=tokens_in,
-        tokens_out=tokens_out,
-        cost_usd=estimate_cost_usd(model, tokens_in, tokens_out),
-        model=model,
+        tokens_in=totals.input_tokens,
+        tokens_out=totals.output_tokens,
+        cost_usd=provider.estimate_cost_usd(model, totals),
+        model=model_reported,
+        provider=provider.name,
     )
 
 
@@ -289,8 +300,6 @@ def _render_markdown(
     citations: list[ValidatedCitation],
     rejected: list[dict],
 ) -> str:
-    """Append the Sources section to the LLM's body output."""
-
     parts = [body.rstrip()]
     if citations:
         parts.append("\n\n## Sources\n")

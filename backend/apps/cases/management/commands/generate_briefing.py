@@ -26,7 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.cases.models import CaseTemplate, SurgeonPreference
 from apps.cases.services.briefing import generate_briefing
-from apps.wiki.services.anthropic_client import AnthropicConfigurationError
+from apps.wiki.services.providers import ProviderConfigurationError
 
 
 class Command(BaseCommand):
@@ -88,7 +88,7 @@ class Command(BaseCommand):
                 time_minutes=opts["time"],
                 focus_text=opts["focus"],
             )
-        except AnthropicConfigurationError as e:
+        except ProviderConfigurationError as e:
             raise CommandError(str(e)) from e
         except Exception as e:
             raise CommandError(f"briefing generation failed: {e}") from e
@@ -100,7 +100,7 @@ class Command(BaseCommand):
                 f"Briefing complete: {len(result.citations)} cited claims, "
                 f"{len(result.rejected_cites)} rejected. "
                 f"~{result.tokens_in}↓ {result.tokens_out}↑ tokens, "
-                f"~${result.cost_usd:.4f} ({result.model})."
+                f"~${result.cost_usd:.4f} ({result.provider}/{result.model})."
             )
         )
 

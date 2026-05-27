@@ -7,7 +7,7 @@ Django 5.2 + DRF. Source of truth for users, modules, progress, uploads.
 - `config/` — project: `settings/{base,dev,prod}.py`, `urls.py`, `views.py` (health), wsgi/asgi
 - `apps/users/` — custom User model (email login, role), auth endpoints, role permission classes
 - `apps/cases/` — CaseTemplate + SurgeonPreference. `services/briefing.py` owns the briefing tool-use loop with `cite(claim_id)`; `management/commands/generate_briefing.py` is the CLI.
-- `apps/wiki/` — WikiPage + Claim + IngestRun (append-only ingest log). `services/anthropic_client.py` centralizes SDK config (raises a clear error when `ANTHROPIC_API_KEY` is unset). `services/ingest.py` runs propose → adversarial-audit → compose-markdown-prose; `management/commands/ingest_document.py` is the CLI and writes both the prose into `WikiPage.content` and the audit-flagged Claims off the page.
+- `apps/wiki/` — WikiPage + Claim + IngestRun (append-only ingest log). `services/providers/` holds the provider abstraction (`base.py` ABC + `anthropic.py` + `openai_compat.py` + `registry.py`); ingest and briefing services never import an SDK directly. `services/ingest.py` runs propose → adversarial-audit → compose-markdown-prose through the provider abstraction; `management/commands/ingest_document.py` is the CLI and writes both the prose into `WikiPage.content` and the audit-flagged Claims off the page.
 - `apps/documents/` — Document with source freshness fields (`source_date`, `citation`, `review_status`, `reviewed_by`, `last_reviewed_at`). FK is mutually exclusive between `case_template` and `module`.
 - `apps/modules/` — legacy curriculum schema (Module + LearningObjective + KnowledgeCheck + Reference) + `import_modules` YAML importer. Retained for compatibility; not read by the briefing path.
 - `apps/` — telemetry app planned in Phase B (per-request rows for inputs, outputs, validation results, cost).
@@ -51,7 +51,9 @@ Run from `backend/`:
 
 `import_modules` reads `MODULES_DIR` (defaults to `../modules` natively; compose sets it to `/modules`). Skips `_template/`. Idempotent on YAML changes (re-runs detect adds/edits/deletes for objectives, knowledge checks, and references). Pass `--path /custom/path` or `--dry-run` for variants.
 
-`ingest_document` and `generate_briefing` both require `ANTHROPIC_API_KEY` in env or `backend/.env`. They fail loudly when it is unset; they never silently no-op. Default models are configurable via `ANTHROPIC_BRIEFING_MODEL` / `ANTHROPIC_INGEST_MODEL` / `ANTHROPIC_AUDIT_MODEL` (defaults: Sonnet 4.6 for briefings + ingest, Opus 4.7 for the adversarial audit).
+`ingest_document` and `generate_briefing` route through `apps.wiki.services.providers`. Four provider kinds are supported: `anthropic`, `openai`, `lmstudio`, `openrouter`. Each pipeline stage (briefing, ingest propose, ingest audit, ingest compose) has its own `LLM_*_PROVIDER` + `LLM_*_MODEL` env vars; defaults are `anthropic` + Sonnet 4.6 across the board (Opus 4.7 for audit). LM Studio and OpenRouter and OpenAI share one implementation that overrides `base_url` on the openai SDK; LM Studio is treated as free, OpenAI uses a local pricing table, OpenRouter returns no estimate (the API reports actual cost in response — surfacing that is deferred).
+
+The relevant API key for whichever provider a stage uses must be set; commands raise `ProviderConfigurationError` if not. LM Studio's "key" is a sentinel — any non-empty string works — and the default is "lm-studio". Briefing tool-use loops require providers that support function calling; many local models loaded in LM Studio do not. Pick models accordingly when routing briefing to a non-Anthropic provider.
 
 ## Conventions
 
