@@ -1,7 +1,7 @@
 from django.contrib import admin
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import Claim, WikiPage
+from .models import Claim, IngestRun, WikiPage
 
 
 class ClaimInline(admin.TabularInline):
@@ -27,6 +27,47 @@ class WikiPageAdmin(SimpleHistoryAdmin):
     readonly_fields = ("created_at", "updated_at", "approved_at")
     filter_horizontal = ("source_documents",)
     inlines = [ClaimInline]
+
+
+@admin.register(IngestRun)
+class IngestRunAdmin(SimpleHistoryAdmin):
+    list_display = (
+        "id",
+        "source_document",
+        "ingested_by",
+        "status",
+        "claims_created",
+        "claims_audited_ok",
+        "claims_audited_weak",
+        "cost_usd",
+        "started_at",
+    )
+    list_filter = ("status", "model_propose", "model_audit", "model_compose")
+    search_fields = ("source_document__filename", "ingested_by__email")
+    readonly_fields = (
+        "source_document",
+        "ingested_by",
+        "wiki_pages",
+        "model_propose",
+        "model_audit",
+        "model_compose",
+        "propose_tokens_in",
+        "propose_tokens_out",
+        "audit_tokens_in",
+        "audit_tokens_out",
+        "compose_tokens_in",
+        "compose_tokens_out",
+        "cost_usd",
+        "claims_proposed",
+        "claims_audited_ok",
+        "claims_audited_weak",
+        "claims_created",
+        "claims_updated",
+        "status",
+        "error_message",
+        "started_at",
+        "completed_at",
+    )
 
 
 @admin.register(Claim)

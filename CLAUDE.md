@@ -28,6 +28,7 @@ See [CODEBASE_MAP.md](CODEBASE_MAP.md) for the directory map and per-subdir CLAU
 - `import_modules` still seeds the legacy starter modules; the briefing path does not read them. Authoring case templates and surgeon preferences happens through the Django admin (and, later, a YAML importer mirroring `import_modules`).
 - Phase A introduced `apps.cases` (`CaseTemplate`, `SurgeonPreference`) as a new model rather than reshaping `Module`. The two starter modules in `modules/` are kept on disk for now; they aren't a source of truth for briefings.
 - **No RAG.** A briefing loads only the relevant case template + surgeon preference data + relevant published claims into context. Topic-scoped, not corpus-scoped. If you find yourself reaching for a vector store, you're off the rails.
+- **LLM-wiki content model.** The reference architecture is Karpathy's LLM-wiki gist (`442a6bf555914893e9891c11519de94f`). The LLM writes the wiki page content; humans curate sources and review. Every ingest appends an `IngestRun` log row. Atomic `Claim` rows hang off pages as citation hooks for the briefing's validated `cite(claim_id)` tool call.
 - **Anthropic SDK calls are gated on `ANTHROPIC_API_KEY`.** The ingest and briefing commands raise a clear error when the key is missing; they never silently call the network from tests or migrations. Default models: `claude-sonnet-4-6` for briefings, `claude-opus-4-7` reserved for ingest if quality demands. Both env-configurable.
 
 ## Hard non-goals (do not propose)

@@ -42,3 +42,33 @@ Option 2 is cleaner but adds migration work. Decision deferred until the first P
 **Next decision point.** When ingesting the first real PDF: confirm whether the propose+audit token counts and verdict quality justify keeping Opus on the audit pass, or whether Sonnet 4.6 is sufficient. The audit pass is the expensive call; downgrading it would drop per-document ingest cost roughly 5x.
 
 **Deferred for after the first real briefing run: Anthropic prompt caching.** The static parts of the briefing prompt (system prompt + the published-claims catalog for a case) are exactly what `cache_control: {type: "ephemeral"}` is for, and the scope doc's cost model assumed it. Skipping it now keeps Phase A small, but wire it in before opening the briefing CLI to real residents — at the $100/month budget it matters more than it would have at $1000/month.
+
+## 2026-05-26 — LLM-wiki architecture reference + ingest pipeline alignment
+
+**Reference model: Karpathy's LLM-wiki gist (`442a6bf555914893e9891c11519de94f`).** Adopting this as the explicit architectural source for the content layer. Key tenets from the gist that we follow:
+
+- **No RAG.** The LLM reads an index/topic-scoped artifact directly, not retrieved fragments. Our briefing path already does this (CaseTemplate + SurgeonPreference + published Claims loaded in full per case; no embeddings, no similarity search).
+- **The LLM writes the wiki, not humans.** Humans curate sources and review; the LLM produces the page content. Before today's change our `ingest_document` only persisted atomic Claims and left `WikiPage.content` empty. Now the ingest pipeline has a third compose pass: after propose + adversarial audit, the audit-OK claims feed a markdown-writing call that populates `WikiPage.content` with cited prose (each factual sentence ends with `[[claim_id]]`). Faculty reviews the prose + the underlying claims in admin before publishing.
+- **Append a log entry.** Added `apps.wiki.IngestRun` — one immutable row per `ingest_document` invocation, recording source, pages touched, claim counts by audit verdict, per-pass token usage, total cost, models used, and status. Browsable in admin. Treated as the wiki's append-only operation log.
+
+**Where we diverge from the Karpathy model (knowingly):**
+
+- **Batch ingest, not interactive.** Karpathy's flow has the LLM discuss findings with the human mid-ingest. We have a fire-and-forget CLI today. Faculty review happens in admin after the run completes. Interactive ingest is a Phase B web-UI concern; CLI stays batch through Phase A.
+- **One page per ingest.** Karpathy: one source touches 10–15 pages. We take one `--wiki-page-path` per run. Decomposition into multi-page touches is deferred until a real source PDF shows what shape this actually wants.
+- **Atomic Claims alongside prose.** Karpathy's wiki is page-centric. We retain the `Claim` atom because the briefing's `cite(claim_id)` validated-tool-call contract requires server-side identity for each citation; the scope doc explicitly mandates this. Pages carry the prose; claims are the citation hooks.
+
+**What this changes in code (commit to land after this entry):**
+
+- New `apps.wiki.IngestRun` model + admin registration; migration `wiki/0003`.
+- `apps.wiki.services.ingest.compose_page()` — third LLM pass turning audit-OK claims into markdown.
+- `apps.wiki.services.ingest.IngestResult` carries `page_markdown` + `compose_tokens_in/out` + `compose_cost_usd`.
+- `ingest_document` opens an `IngestRun` row up front, finalizes it on success or failure, and writes the composed prose into `WikiPage.content`. Pre-existing page prose is preserved as an HTML comment beneath the new content so the diff is reviewable in admin history.
+
+**Cost-model recalc.** The compose pass is a third LLM call per ingest. Rough estimate against the scope doc's original numbers: propose ($0.05–0.15) + audit ($0.05–0.15, Opus heavier) + compose ($0.03–0.10, Sonnet on much smaller input). Order-of-magnitude $0.15–$0.40 per ingest, up from $0.10–$0.30. Still fits the $30/month ingest envelope at ~75 documents/month, which is well past expected authoring volume. Re-measure once real PDFs land.
+
+**Next decision points for the ingest pipeline:**
+
+- Chunking strategy when the first real PDF is too large for a single propose call. Probably section-aware chunking with overlap, but defer the design until a real PDF tells us what sections look like.
+- OCR fallback for image-only PDFs. `pypdf` returns garbage; either add `pdfplumber + tesseract`, or use Anthropic's vision input on the PDF directly (probably the cleaner path).
+- Whether the per-claim audit should be one batched call (cheap) or N independent calls (strict). Test both on the first real document; pick by verdict quality, not cost.
+- The prior-content-as-HTML-comment behaviour in re-ingest is redundant with simple-history. Drop it once admin merge UX gets real use; keeping for now so faculty can eyeball the diff inline without flipping to history.

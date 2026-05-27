@@ -7,7 +7,7 @@ Django 5.2 + DRF. Source of truth for users, modules, progress, uploads.
 - `config/` — project: `settings/{base,dev,prod}.py`, `urls.py`, `views.py` (health), wsgi/asgi
 - `apps/users/` — custom User model (email login, role), auth endpoints, role permission classes
 - `apps/cases/` — CaseTemplate + SurgeonPreference. `services/briefing.py` owns the briefing tool-use loop with `cite(claim_id)`; `management/commands/generate_briefing.py` is the CLI.
-- `apps/wiki/` — WikiPage + Claim. `services/anthropic_client.py` centralizes SDK config (raises a clear error when `ANTHROPIC_API_KEY` is unset). `services/ingest.py` runs propose → adversarial-audit; `management/commands/ingest_document.py` is the CLI.
+- `apps/wiki/` — WikiPage + Claim + IngestRun (append-only ingest log). `services/anthropic_client.py` centralizes SDK config (raises a clear error when `ANTHROPIC_API_KEY` is unset). `services/ingest.py` runs propose → adversarial-audit → compose-markdown-prose; `management/commands/ingest_document.py` is the CLI and writes both the prose into `WikiPage.content` and the audit-flagged Claims off the page.
 - `apps/documents/` — Document with source freshness fields (`source_date`, `citation`, `review_status`, `reviewed_by`, `last_reviewed_at`). FK is mutually exclusive between `case_template` and `module`.
 - `apps/modules/` — legacy curriculum schema (Module + LearningObjective + KnowledgeCheck + Reference) + `import_modules` YAML importer. Retained for compatibility; not read by the briefing path.
 - `apps/` — telemetry app planned in Phase B (per-request rows for inputs, outputs, validation results, cost).

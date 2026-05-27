@@ -67,6 +67,25 @@ No prose outside the JSON.
 """
 
 
+COMPOSE_SYSTEM_PROMPT = """You write a single wiki page that summarizes a urology source
+document for resident case prep. You will receive: (1) the page's title and
+topic anchor, (2) a list of claims that passed the adversarial audit, each
+with a claim_id slug and supporting source quote.
+
+Produce markdown for the page body. Hard rules:
+- Every factual sentence MUST end with an inline citation in the form
+  `[[claim_id]]` matching one of the provided claim_ids. Do NOT cite claim_ids
+  you were not given. Do NOT make factual statements without a citation.
+- Group claims into short sections with `## Heading` lines. Keep prose tight
+  and clinical, not promotional.
+- Do not invent statements that go beyond the audited claims.
+- Length: short — 200-500 words depending on how many claims you were given.
+
+Return only the markdown body, no surrounding prose, no code fences, no
+"Here is the page" preamble.
+"""
+
+
 @dataclass
 class ProposedClaim:
     claim_id: str
@@ -87,16 +106,20 @@ class ClaimVerdict:
 class IngestResult:
     proposed: list[ProposedClaim] = field(default_factory=list)
     verdicts: list[ClaimVerdict] = field(default_factory=list)
+    page_markdown: str = ""
     propose_tokens_in: int = 0
     propose_tokens_out: int = 0
     audit_tokens_in: int = 0
     audit_tokens_out: int = 0
+    compose_tokens_in: int = 0
+    compose_tokens_out: int = 0
     propose_cost_usd: float = 0.0
     audit_cost_usd: float = 0.0
+    compose_cost_usd: float = 0.0
 
     @property
     def total_cost_usd(self) -> float:
-        return self.propose_cost_usd + self.audit_cost_usd
+        return self.propose_cost_usd + self.audit_cost_usd + self.compose_cost_usd
 
 
 def extract_text_from_pdf(path: Path) -> str:
@@ -206,8 +229,61 @@ def audit_claims(
     return verdicts, usage
 
 
-def run_ingest(document_text: str) -> IngestResult:
-    """Propose + audit in sequence. Returns a structured result the caller persists."""
+def compose_page(
+    *,
+    page_title: str,
+    page_topic: str,
+    audited_claims: list[ProposedClaim],
+    model: str | None = None,
+) -> tuple[str, dict]:
+    """Third LLM pass: turn audit-OK claims into markdown wiki prose.
+
+    Per the Karpathy LLM-wiki model, the LLM writes the page; the human reviews
+    it. Each factual sentence in the output ends with an inline `[[claim_id]]`
+    citation marker referencing one of the claims it was given.
+    """
+
+    client = get_client()
+    model = model or settings.ANTHROPIC_INGEST_MODEL
+    payload = {
+        "page_title": page_title,
+        "page_topic": page_topic,
+        "audited_claims": [
+            {
+                "claim_id": c.claim_id,
+                "statement": c.statement,
+                "source_quote": c.source_quote,
+                "evidence_grade": c.evidence_grade,
+            }
+            for c in audited_claims
+        ],
+    }
+    msg = client.messages.create(
+        model=model,
+        max_tokens=4096,
+        system=COMPOSE_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": json.dumps(payload)}],
+    )
+    raw = "".join(block.text for block in msg.content if block.type == "text").strip()
+    usage = {
+        "input_tokens": msg.usage.input_tokens,
+        "output_tokens": msg.usage.output_tokens,
+    }
+    return raw, usage
+
+
+def run_ingest(
+    document_text: str,
+    *,
+    page_title: str = "",
+    page_topic: str = "",
+) -> IngestResult:
+    """Three-pass ingest: propose → adversarial audit → compose page prose.
+
+    The compose pass only sees claims that passed audit ("ok"); weak and
+    unsupported claims do not appear in the page body but are still persisted
+    as Claim rows so faculty can review them.
+    """
 
     result = IngestResult()
     proposed, propose_usage = propose_claims(document_text)
@@ -232,4 +308,21 @@ def run_ingest(document_text: str) -> IngestResult:
         result.audit_tokens_in,
         result.audit_tokens_out,
     )
+
+    ok_ids = {v.claim_id for v in verdicts if v.verdict == "ok"}
+    audited_ok = [c for c in proposed if c.claim_id in ok_ids]
+    if audited_ok:
+        markdown, compose_usage = compose_page(
+            page_title=page_title or "Wiki page",
+            page_topic=page_topic or "",
+            audited_claims=audited_ok,
+        )
+        result.page_markdown = markdown
+        result.compose_tokens_in = compose_usage["input_tokens"]
+        result.compose_tokens_out = compose_usage["output_tokens"]
+        result.compose_cost_usd = estimate_cost_usd(
+            settings.ANTHROPIC_INGEST_MODEL,
+            result.compose_tokens_in,
+            result.compose_tokens_out,
+        )
     return result

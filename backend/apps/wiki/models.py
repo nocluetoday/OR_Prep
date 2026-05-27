@@ -110,6 +110,82 @@ class WikiPage(models.Model):
         return f"{owner}:{self.path}"
 
 
+class IngestRunStatus(models.TextChoices):
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class IngestRun(models.Model):
+    """One row per `ingest_document` invocation — the wiki's append-only log.
+
+    Per the Karpathy LLM-wiki model (gist 442a6bf...), every ingest appends a
+    log entry. This is that log: which source produced which claims under
+    which models, at what cost. Browsable in admin; treated as immutable after
+    completion (the audit log on the model captures any later annotations).
+    """
+
+    source_document = models.ForeignKey(
+        "documents.Document",
+        on_delete=models.CASCADE,
+        related_name="ingest_runs",
+    )
+    ingested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ingest_runs",
+    )
+    wiki_pages = models.ManyToManyField(
+        "wiki.WikiPage",
+        related_name="ingest_runs",
+        blank=True,
+    )
+
+    model_propose = models.CharField(max_length=64, blank=True)
+    model_audit = models.CharField(max_length=64, blank=True)
+    model_compose = models.CharField(max_length=64, blank=True)
+
+    propose_tokens_in = models.IntegerField(default=0)
+    propose_tokens_out = models.IntegerField(default=0)
+    audit_tokens_in = models.IntegerField(default=0)
+    audit_tokens_out = models.IntegerField(default=0)
+    compose_tokens_in = models.IntegerField(default=0)
+    compose_tokens_out = models.IntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+
+    claims_proposed = models.IntegerField(default=0)
+    claims_audited_ok = models.IntegerField(default=0)
+    claims_audited_weak = models.IntegerField(default=0)
+    claims_created = models.IntegerField(default=0)
+    claims_updated = models.IntegerField(default=0)
+
+    status = models.CharField(
+        max_length=32,
+        choices=IngestRunStatus.choices,
+        default=IngestRunStatus.RUNNING,
+    )
+    error_message = models.TextField(blank=True)
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ("-started_at",)
+
+    def __str__(self) -> str:
+        return f"IngestRun #{self.id}: {self.source_document.filename}"
+
+    @property
+    def total_tokens_in(self) -> int:
+        return self.propose_tokens_in + self.audit_tokens_in + self.compose_tokens_in
+
+    @property
+    def total_tokens_out(self) -> int:
+        return self.propose_tokens_out + self.audit_tokens_out + self.compose_tokens_out
+
+
 class Claim(models.Model):
     """A single factual statement extracted from a Document, attached to a WikiPage.
 

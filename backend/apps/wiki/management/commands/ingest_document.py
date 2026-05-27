@@ -25,16 +25,25 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.cases.models import CaseTemplate
 from apps.documents.models import Document, DocumentStatus, ReviewStatus as DocReviewStatus
-from apps.wiki.models import Claim, ClaimAuditStatus, WikiPage, WikiPageStatus
+from apps.wiki.models import (
+    Claim,
+    ClaimAuditStatus,
+    IngestRun,
+    IngestRunStatus,
+    WikiPage,
+    WikiPageStatus,
+)
 from apps.wiki.services.anthropic_client import AnthropicConfigurationError
 from apps.wiki.services.ingest import extract_text, run_ingest
 
@@ -119,42 +128,68 @@ class Command(BaseCommand):
                 ("created Document " if doc_created else "reusing Document ")
                 + f"id={doc.id} ({doc.filename})"
             )
+            run = IngestRun.objects.create(
+                source_document=doc,
+                ingested_by=uploader,
+                model_propose=settings.ANTHROPIC_INGEST_MODEL,
+                model_audit=settings.ANTHROPIC_AUDIT_MODEL,
+                model_compose=settings.ANTHROPIC_INGEST_MODEL,
+                status=IngestRunStatus.RUNNING,
+            )
 
         # Run the LLM passes outside the transaction so a long ingest does not
         # hold a write lock; persist results in a second short transaction.
         try:
             text = extract_text(source_path)
         except Exception as e:
-            self._mark_failed(doc, f"extraction failed: {e}")
+            self._mark_failed(doc, run, f"extraction failed: {e}")
             raise CommandError(f"extraction failed: {e}") from e
 
         if not text.strip():
-            self._mark_failed(doc, "extraction produced empty text")
+            self._mark_failed(doc, run, "extraction produced empty text")
             raise CommandError("extraction produced empty text")
 
         try:
-            result = run_ingest(text)
+            result = run_ingest(
+                text,
+                page_title=f"{case_template.title} — {opts['wiki_page_path']}",
+                page_topic=opts["wiki_page_path"],
+            )
         except AnthropicConfigurationError as e:
-            self._mark_failed(doc, str(e))
+            self._mark_failed(doc, run, str(e))
             raise CommandError(str(e)) from e
         except Exception as e:
-            self._mark_failed(doc, f"LLM call failed: {e}")
+            self._mark_failed(doc, run, f"LLM call failed: {e}")
             raise CommandError(f"LLM call failed: {e}") from e
 
         verdict_by_claim = {v.claim_id: v for v in result.verdicts}
 
         with transaction.atomic():
-            wiki_page, _ = WikiPage.objects.get_or_create(
+            wiki_page, page_created = WikiPage.objects.get_or_create(
                 case_template=case_template,
                 path=opts["wiki_page_path"],
                 defaults={
                     "title": f"{case_template.title} — {opts['wiki_page_path']}",
                     "status": WikiPageStatus.DRAFT,
+                    "content": result.page_markdown,
                 },
             )
+            if not page_created and result.page_markdown:
+                # Faculty has reviewed the existing prose; overwrite only if there
+                # is fresh material. We append a section divider so the prior
+                # version can be eyeballed in the admin diff.
+                wiki_page.content = (
+                    f"{result.page_markdown}\n\n"
+                    f"<!-- prior content (pre-ingest #{run.id}):\n{wiki_page.content}\n-->"
+                    if wiki_page.content.strip()
+                    else result.page_markdown
+                )
+                wiki_page.save(update_fields=["content"])
             wiki_page.source_documents.add(doc)
+            run.wiki_pages.add(wiki_page)
 
             written = 0
+            updated = 0
             for proposed in result.proposed:
                 verdict = verdict_by_claim.get(proposed.claim_id)
                 audit_status = ClaimAuditStatus.PROPOSED
@@ -165,7 +200,7 @@ class Command(BaseCommand):
                     )
                     audit_notes = f"[{verdict.verdict}] {verdict.rationale}"
                 locator = {**proposed.source_locator, "evidence_grade": proposed.evidence_grade}
-                Claim.objects.update_or_create(
+                _, created = Claim.objects.update_or_create(
                     wiki_page=wiki_page,
                     claim_id=proposed.claim_id,
                     defaults={
@@ -178,24 +213,46 @@ class Command(BaseCommand):
                     },
                 )
                 written += 1
+                if not created:
+                    updated += 1
 
             doc.status = DocumentStatus.EXTRACTED
             doc.extracted_text_path = ""  # text held in claims, not persisted to disk yet
             doc.save(update_fields=["status", "extracted_text_path"])
 
+            ok = sum(1 for v in result.verdicts if v.verdict == "ok")
+            weak = sum(1 for v in result.verdicts if v.verdict == "weak")
+            unsup = sum(1 for v in result.verdicts if v.verdict == "unsupported")
+            run.propose_tokens_in = result.propose_tokens_in
+            run.propose_tokens_out = result.propose_tokens_out
+            run.audit_tokens_in = result.audit_tokens_in
+            run.audit_tokens_out = result.audit_tokens_out
+            run.compose_tokens_in = result.compose_tokens_in
+            run.compose_tokens_out = result.compose_tokens_out
+            run.cost_usd = Decimal(f"{result.total_cost_usd:.4f}")
+            run.claims_proposed = len(result.proposed)
+            run.claims_audited_ok = ok
+            run.claims_audited_weak = weak + unsup
+            run.claims_created = written - updated
+            run.claims_updated = updated
+            run.status = IngestRunStatus.COMPLETED
+            run.completed_at = timezone.now()
+            run.save()
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Ingested {written} claims (propose ${result.propose_cost_usd:.4f} + "
-                f"audit ${result.audit_cost_usd:.4f} = ${result.total_cost_usd:.4f})"
+                f"audit ${result.audit_cost_usd:.4f} + "
+                f"compose ${result.compose_cost_usd:.4f} = ${result.total_cost_usd:.4f})"
             )
         )
-        ok = sum(1 for v in result.verdicts if v.verdict == "ok")
-        weak = sum(1 for v in result.verdicts if v.verdict == "weak")
-        unsup = sum(1 for v in result.verdicts if v.verdict == "unsupported")
-        self.stdout.write(f"  audit verdicts: ok={ok} weak={weak} unsupported={unsup}")
         self.stdout.write(
-            "Claims are written as drafts. Review them in /admin/wiki/claim/ and set "
-            "audit_status=published before they are citable."
+            f"  audit verdicts: ok={ok} weak={weak} unsupported={unsup}; "
+            f"page prose: {len(result.page_markdown)} chars"
+        )
+        self.stdout.write(
+            f"  IngestRun #{run.id} logged. Review WikiPage prose + claims in admin; "
+            f"set audit_status=published before they are citable."
         )
 
     def _sha256(self, path: Path) -> str:
@@ -225,7 +282,11 @@ class Command(BaseCommand):
                 f"telemetry lands in Phase B.)"
             )
 
-    def _mark_failed(self, doc: Document, reason: str) -> None:
+    def _mark_failed(self, doc: Document, run: "IngestRun", reason: str) -> None:
         doc.status = DocumentStatus.FAILED
         doc.error_message = reason
         doc.save(update_fields=["status", "error_message"])
+        run.status = IngestRunStatus.FAILED
+        run.error_message = reason
+        run.completed_at = timezone.now()
+        run.save(update_fields=["status", "error_message", "completed_at"])
