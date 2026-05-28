@@ -45,32 +45,57 @@ Standing today:
 
 ## Roadmap
 
-Four phases. Each item is checked off only when it actually lands; phases are marked complete only when their definition of done in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) is met (which for Phase A requires ingesting a real AUA HoLEP guideline PDF end-to-end).
+Four phases with definitions of done in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md). Items are marked done only when they actually land.
 
-### Phase A — Correctness layer + knowledge base extension (in progress)
+**Short status as of today:**
+- Backend correctness layer + CLIs are built and tested up to the LLM call (Phase A foundation).
+- The resident-facing UI is still just login / register / placeholder home. **No briefing input form, no renderer, no telemetry.** That's all Phase B and none of it has shipped.
+- To produce a real briefing right now, you'd author content in Django admin and run the CLI; the web UI doesn't expose any of this yet.
 
-- [x] `apps.cases` with `CaseTemplate` schema (one per case type) and `SurgeonPreference` schema (per attending, per case type), both with `HistoricalRecords`.
-- [x] Claim-level source attribution on wiki pages (`apps.wiki.Claim` with FK to `Document` + source-span quote/page).
-- [x] Page version pinning in citations — every claim resolved to a specific `WikiPage` history id so later edits don't silently invalidate prior briefings.
-- [x] Source freshness metadata on `Document` (`source_date`, `last_reviewed_at`, `review_status`, reviewer).
-- [x] Django admin registrations for `CaseTemplate`, `SurgeonPreference`, `Claim`, and `Document` review fields.
-- [x] Ingest pipeline stub (`manage.py ingest_document <path>`): extract → propose claims → adversarial audit → write as draft `Claim`s. Gated on `ANTHROPIC_API_KEY`.
-- [x] Briefing CLI stub (`manage.py generate_briefing --case ... --surgeon ... --time ...`) with the `cite(claim_id)` tool. Gated on `ANTHROPIC_API_KEY`; the server validates every `cite` against the DB and drops/flags unsupported claims before rendering.
-- [ ] HoLEP case template, Neff HoLEP surgeon preferences, and a real reviewed source ingested end-to-end (closes Phase A).
+### Phase A — Correctness layer + knowledge base extension (foundation built; awaiting real content)
+
+**Schema and data layer — done.**
+- [x] `apps.cases.CaseTemplate` + `apps.cases.SurgeonPreference` with `HistoricalRecords` and per-CaseTemplate provider/model override fields.
+- [x] `apps.wiki.Claim` with FK to `Document` + source quote/locator + audit-status lifecycle (proposed → audited_ok / audited_weak → published / rejected).
+- [x] `apps.wiki.WikiPage` attached to a `CaseTemplate` or legacy `Module` (XOR check constraint); page-level draft/published/archived status; `django-simple-history` version pinning at citation time.
+- [x] `apps.wiki.IngestRun` — append-only log per `ingest_document` call (source, models, tokens, cost, verdict counts, status).
+- [x] `apps.documents.Document` extended with source_date, citation, review_status, reviewed_by, last_reviewed_at.
+- [x] Django admin registrations for all of the above.
+
+**Pipelines (CLIs) — done.**
+- [x] Ingest CLI (`manage.py ingest_document`): extract → propose claims → adversarial audit → compose markdown prose into `WikiPage.content` → persist draft Claims + IngestRun log row. Three LLM passes. Follows the [Karpathy LLM-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) model: LLM writes the page, human curates.
+- [x] Briefing CLI (`manage.py generate_briefing`): tool-use loop with server-validated `cite(claim_id)`; renders markdown with citations + a "Citation issues" footer for unsupported cites; loud warning when the model never called the cite tool.
+
+**Provider abstraction — done (goes beyond original Phase A scope; landed because you asked).**
+- [x] Provider ABC (`apps.wiki.services.providers`) supporting `anthropic`, `openai`, `lmstudio`, `openrouter`.
+- [x] Per-stage routing (`LLM_BRIEFING_PROVIDER`, `LLM_INGEST_PROPOSE_PROVIDER`, `LLM_INGEST_AUDIT_PROVIDER`, `LLM_INGEST_COMPOSE_PROVIDER`) so different stages can use different backends.
+- [x] Per-`CaseTemplate` override for the briefing stage (admin-editable).
+- [x] Anthropic prompt caching on system prompt + static-catalog content blocks; cache-hit tokens flow into cost estimate.
+- [x] OpenRouter cost-from-response (authoritative `usage.cost` instead of local pricing estimate).
+
+**Phase A close — TODO. Mostly content + config work, not code:**
+- [ ] **Drop `ANTHROPIC_API_KEY=…` into `backend/.env`** (or set the `LLM_INGEST_*_PROVIDER`/`LLM_BRIEFING_PROVIDER` env vars to route to LM Studio / OpenAI / OpenRouter, plus the matching key + model).
+- [ ] **Author the real HoLEP `CaseTemplate` in Django admin** at `/admin/cases/casetemplate/`: case_type, title, summary, anatomy_focus, decision_points, complication_patterns, attending_question_categories, patient_factor_fields. There's a placeholder smoke-test row at id=1 you can either edit or delete.
+- [ ] **Bump your superuser role to `faculty`** at `/admin/users/user/` (created earlier via `createsuperuser`; default role is `resident`). Add a `SurgeonPreference` row attached to the HoLEP CaseTemplate.
+- [ ] **Ingest one reviewed source PDF** (AUA HoLEP guideline preferred; any reviewed source works for the first pass). Review the proposed Claims at `/admin/wiki/claim/` and set `audit_status=published` on the ones that pass.
+- [ ] **Run `generate_briefing` end-to-end** and confirm citations resolve, audit-flagged claims are excluded, no factual sentence is uncited.
 
 ### Phase B — Briefing surface (not started)
 
-- [ ] Input form (web UI, fillable in under 60 seconds).
-- [ ] Briefing renderer with inline citations hoverable to source quote.
-- [ ] Session telemetry: every briefing request stored with inputs, outputs, citations, validation results, and cost.
-- [ ] Disclaimer modal and footer ("Educational preparation only. Not intraoperative guidance.").
+Phase B is what turns the auth shell into a real briefing tool. Right now there's nothing for a logged-in user to do.
+
+- [ ] **DRF briefing endpoint.** New `POST /api/briefings/` that wraps the existing `generate_briefing` service; auth required; returns the rendered markdown + structured citation payload. Plus `GET /api/case-templates/` to drive the case-type dropdown.
+- [ ] **Briefing input form.** Replace the placeholder `Home` page with the input form: case-type dropdown (from published `CaseTemplate` rows), patient-factor structured fields (driven by `CaseTemplate.patient_factor_fields`), optional surgeon dropdown, time budget (5 / 10 / 20), focus free-text. Fillable in under 60 seconds.
+- [ ] **Briefing renderer.** Markdown render of the response; inline `[[claim_id]]` markers turned into hoverable footnote refs that pop the source quote + citation. No-tool-calls warning rendered as a banner.
+- [ ] **Session telemetry tables.** New `apps.telemetry` app with `BriefingRequest` + `Citation` rows: every submission stored with full inputs, output markdown, validated citations (with `page_history_id` pins), token + cost, latency. **Must land before any beta user touches the system.**
+- [ ] **Disclaimer modal + footer.** First-visit modal: *"Educational preparation only. Not intraoperative guidance. Verify clinically relevant details with your attending."* Persistent short footer.
 
 ### Phase C — Beta and post-case debrief (not started)
 
 - [ ] Minimal VPS deploy: Docker Compose + Caddy + Let's Encrypt + daily Postgres dump.
 - [ ] Post-case debrief form (matched-reality / missing / wrong / 1–5 usefulness rating).
-- [ ] Admin telemetry dashboard.
-- [ ] Recruit 3–5 KU urology residents; first real briefings generated.
+- [ ] Read-only admin telemetry dashboard: briefing counts, case-type distribution, citation validity rates, debrief feedback, daily/monthly cost.
+- [ ] Recruit 3–5 KU urology residents and run first real briefings.
 
 ### Phase D — Writeup (not started)
 
@@ -79,7 +104,16 @@ Four phases. Each item is checked off only when it actually lands; phases are ma
 - [ ] AUA Education and Research subsection abstract submitted.
 - [ ] Paper draft (target: *Journal of Surgical Education*).
 
-Definitions of done and the "when to break the plan" criteria live in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md).
+"When to break the plan" criteria live in [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md).
+
+## What to do right now
+
+Two tracks can run in parallel:
+
+1. **Close Phase A** (your work, mostly): drop an API key in `backend/.env`, author the HoLEP `CaseTemplate` in admin, bump your role to `faculty`, ingest a reviewed source PDF, review the audit verdicts, run `generate_briefing`. No further code changes needed for Phase A unless something breaks in real use.
+2. **Start Phase B** (code work): wire the DRF endpoint that wraps `generate_briefing`, build the React input form + renderer to replace the placeholder home page, stand up the telemetry tables, add the disclaimer. The input form and renderer can be scaffolded with placeholder data before your `CaseTemplate` content is real, then validated against it.
+
+Phase B is the next major code track. Phase A's remaining work is content and config — it can run in the background while Phase B is being built.
 
 ## Running it locally
 
