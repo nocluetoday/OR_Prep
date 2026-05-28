@@ -82,15 +82,66 @@ Four phases with definitions of done in [OR Procedural Case Prep.md](OR%20Proced
 - [ ] **Ingest one reviewed source PDF** (AUA HoLEP guideline preferred; any reviewed source works for the first pass). Review the proposed Claims at `/admin/wiki/claim/` and set `audit_status=published` on the ones that pass.
 - [ ] **Run `generate_briefing` end-to-end** and confirm citations resolve, audit-flagged claims are excluded, no factual sentence is uncited.
 
-### Phase B — Briefing surface (not started)
+### Phase B — Briefing surface (refined spec; not started; ordered)
 
-Phase B is what turns the auth shell into a real briefing tool. Right now there's nothing for a logged-in user to do.
+Phase B turns the auth shell into a real briefing tool. **Full refined spec, performance targets, non-goals, and step-B1 implementation plan are in [docs/resident-ux-refinement.md](docs/resident-ux-refinement.md).**
 
-- [ ] **DRF briefing endpoint.** New `POST /api/briefings/` that wraps the existing `generate_briefing` service; auth required; returns the rendered markdown + structured citation payload. Plus `GET /api/case-templates/` to drive the case-type dropdown.
-- [ ] **Briefing input form.** Replace the placeholder `Home` page with the input form: case-type dropdown (from published `CaseTemplate` rows), patient-factor structured fields (driven by `CaseTemplate.patient_factor_fields`), optional surgeon dropdown, time budget (5 / 10 / 20), focus free-text. Fillable in under 60 seconds.
-- [ ] **Briefing renderer.** Markdown render of the response; inline `[[claim_id]]` markers turned into hoverable footnote refs that pop the source quote + citation. No-tool-calls warning rendered as a banner.
-- [ ] **Session telemetry tables.** New `apps.telemetry` app with `BriefingRequest` + `Citation` rows: every submission stored with full inputs, output markdown, validated citations (with `page_history_id` pins), token + cost, latency. **Must land before any beta user touches the system.**
-- [ ] **Disclaimer modal + footer.** First-visit modal: *"Educational preparation only. Not intraoperative guidance. Verify clinically relevant details with your attending."* Persistent short footer.
+Five ordered steps with hard gates between them. **Do not start step N+1 until step N is working end-to-end and Don has tested it.**
+
+#### Step B1 — Per-case input schema mechanism (architectural foundation)
+
+- [ ] Rename `CaseTemplate.patient_factor_fields` → `input_schema` with default `{"quick": [], "expanded": []}`; single migration.
+- [ ] YAML schema spec at `schemas/case_template.schema.yaml` documenting top-level fields + the `input_schema` block (per-field: `name`, `label`, `type` ∈ {`select`, `text`, `number`, `boolean`, `multi_select`}, `required`, `options[]`, `help_text`).
+- [ ] `manage.py import_case_templates` mirroring `import_modules.py`; validates structure, reports created/updated/unchanged, `--dry-run` + `--path` flags.
+- [ ] Sample HoLEP at `modules/cases/holep/case_template.yaml`: realistic anatomy / decisions / complications / questions, quick set (`prostate_volume_g`, `indication`, `anticoagulation`, `prior_interventions`), expanded (`qmax_ml_per_s`, `pvr_ml`, `notable_comorbidities`).
+- [ ] Admin fieldsets surface `input_schema`.
+- [ ] **Hard gate: Don tests B1 end-to-end before B2 starts.**
+
+#### Step B2 — Single-screen input form
+
+- [ ] DRF endpoint `POST /api/briefings/` wrapping `generate_briefing`; `GET /api/case-templates/` driving the case dropdown.
+- [ ] Replace placeholder Home with a single-screen form (**no multi-step wizard**): greeting *"Good morning, Dr. [name]. Quick prep for tomorrow's case?"*; attending dropdown (defaults to last-used; asterisk + tooltip for attendings with documented prefs; selectable even without prefs); case dropdown (searchable; "Other" fallback opens free text and logs the entry to a new table so Don sees what's missing); case date (defaults tomorrow); time radio (5 / 10 / 20 min); case-specific fields rendered from `input_schema.quick`; "More detail" expander for `input_schema.expanded`; focus free-text; Generate button.
+- [ ] Value-statement banner for users with <5 prior briefings: *"Five minutes of prep, grounded in [attending]'s preferences and reviewed literature. Citations on every claim."* Hidden after 5.
+- [ ] Performance targets: form interactive in **<5s** from app open; quick set completable in **30-60s**; briefing renders in **<15s**.
+- [ ] **Hard gate: Don tests B2 before B3 starts.**
+
+#### Step B3 — Decision-led briefing output
+
+- [ ] Refactor `BRIEFING_SYSTEM_PROMPT` to the new section order: (1) Setup + positioning with case-specific variations folded in; (2) **Decision points (3-5) — the centerpiece**, each with the moment, the consideration, the attending's preferred approach + citation, and the alternative; (3) Steps folded into the decision points where relevant (not a separate flat list); (4) Equipment + consumables checklist at the end, screenshot-friendly; (5) Anticipated complications, case-specific; (6) Post-op care to discharge (brief, only if a pathway exists for the case type); (7) Likely attending questions (3-5).
+- [ ] Briefing renderer with hoverable `[[claim_id]]` citation tooltips revealing source quote. No-tool-calls warning rendered as a banner (backend already emits the diagnostic).
+- [ ] **Non-negotiable:** when no documented preferences exist for the selected attending, briefing leads with a visible banner: *"No documented preferences for [attending]. This briefing reflects a standard approach. Confirm specifics with your attending pre-op."*
+- [ ] **Hard gate: Don tests B3 before B4 starts.**
+
+#### Step B4 — Follow-up turn capability
+
+- [ ] Single input below briefing: *"Ask a follow-up question about this case."* Up to 3 follow-up turns per case.
+- [ ] System prompt enforces: stay within the loaded case context + knowledge base; do not generalize to other urology topics; if out-of-scope, say so plainly and suggest the wiki or attending.
+- [ ] After 3 turns, input swaps to *"Done with this case — I'll ask how it went later"* + Close Session button.
+- [ ] Telemetry per follow-up turn: `turn_id`, `request_id`, `content`, `cost`, `citations called`. (Establishes the minimum `apps.telemetry` scaffolding needed here; expanded in B5.)
+- [ ] **Hard gate: Don tests B4 before B5 starts.**
+
+#### Step B5 — Post-case debrief
+
+- [ ] Prompt fires either at end-of-day (if the case was today) or on next app open after the case date passes. **Not immediately after the case.**
+- [ ] Form: *"How did the [case type] go with [attending]?"* + matched-reality text + missing text + wrong text + usefulness 1-5 radio. Skip button always available; **skipping is logged as a separate event**.
+- [ ] Storage: debrief table tied to the original `request_id`; all submission fields optional.
+- [ ] Closes the full Phase B telemetry parent: every briefing request stored with full inputs / outputs / citations / cost / latency / debrief.
+- [ ] **Hard gate: Don tests B5; Phase B done.**
+
+#### Disclaimer + footer (lands in B2; carried through)
+
+- [ ] First-visit modal + persistent short footer: *"Educational preparation only. Not intraoperative guidance. Verify clinically relevant details with your attending."*
+
+#### Explicitly NOT in Phase B
+
+Per refinement spec — see [docs/resident-ux-refinement.md](docs/resident-ux-refinement.md#what-not-to-build):
+
+- Multi-step wizard / modal flow (one screen, all fields visible).
+- Attending typeahead UI polish, animations, transitions.
+- Notification systems beyond the in-app debrief prompt — no email, no push.
+- Calendar integration.
+- Sharing or export beyond the equipment checklist screenshot.
+- Anything that turns this into a general tutor in the follow-up turns.
 
 ### Phase C — Beta and post-case debrief (not started)
 
@@ -112,10 +163,10 @@ Phase B is what turns the auth shell into a real briefing tool. Right now there'
 
 Two tracks can run in parallel:
 
-1. **Close Phase A** (your work, mostly): drop an API key in `backend/.env`, author the HoLEP `CaseTemplate` in admin, bump your role to `faculty`, ingest a reviewed source PDF, review the audit verdicts, run `generate_briefing`. No further code changes needed for Phase A unless something breaks in real use.
-2. **Start Phase B** (code work): wire the DRF endpoint that wraps `generate_briefing`, build the React input form + renderer to replace the placeholder home page, stand up the telemetry tables, add the disclaimer. The input form and renderer can be scaffolded with placeholder data before your `CaseTemplate` content is real, then validated against it.
+1. **Close Phase A** (your work, mostly): drop an API key in `backend/.env` *or* configure it in `/admin/wiki/llmsettings/`, author the HoLEP `CaseTemplate` in admin, bump your role to `faculty`, ingest a reviewed source PDF, review the audit verdicts, run `generate_briefing`. No further code changes needed for Phase A unless something breaks in real use.
+2. **Start Phase B at Step B1** (next code chunk): the per-case input schema mechanism. Detailed plan in [docs/resident-ux-refinement.md](docs/resident-ux-refinement.md#step-b1--approved-implementation-plan). Single migration + YAML schema spec + `manage.py import_case_templates` + a fully authored HoLEP sample. After B1 lands and you've tested it end-to-end, the next session moves to B2 (single-screen input form). **No working ahead** — each step gates on the previous one passing.
 
-Phase B is the next major code track. Phase A's remaining work is content and config — it can run in the background while Phase B is being built.
+Phase A's remaining work is content and config. It can run in the background while Phase B code work proceeds, step by step.
 
 ## Running it locally
 

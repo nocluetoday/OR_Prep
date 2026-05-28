@@ -176,3 +176,19 @@ Post-cleanup admin index shows: Case authoring (CaseTemplates, SurgeonPreference
 - Rotating `DJANGO_SECRET_KEY` invalidates all stored API keys (Fernet decryption fails with `InvalidToken`, returning empty string, falling through to env). Faculty re-enters keys after a rotation. This is intentional — a separate `LLM_CONFIG_KEY` env var would let them rotate independently, but adds another secret to manage; the SECRET_KEY-derivation trade-off matches the PoC scope.
 - The `_db_settings()` lookup in `llm_config.py` does one query per provider/stage resolution. For batch CLIs this is a handful of queries per ingest/briefing run — negligible. If a future hot-path needs it, `lru_cache` plus an explicit cache-bust on `LLMSettings.save()` would handle it.
 - **History table grows with every save.** `simple_history` writes a `HistoricalLLMSettings` row on each save — including every dropdown change in admin and every key rotation. Ciphertext stays encrypted in those rows. Over years this could accumulate; not a problem in PoC. Periodic `manage.py clean_old_history` ([django-simple-history command](https://django-simple-history.readthedocs.io/en/latest/utils.html#clean-old-history)) handles trimming if it becomes one.
+
+## 2026-05-27 — Phase B refinement spec + step B1 plan captured (execution deferred)
+
+User refined the Phase B spec significantly: single-screen form (not multi-step), per-case input schema declared in YAML alongside template content, decision-led briefing output, follow-up turn capability scoped to one case, post-case debrief that fires at end-of-day or next-app-open (not immediately after the case). Five ordered steps with hard gates — no working ahead. Full spec + step-B1 implementation plan captured in [docs/resident-ux-refinement.md](resident-ux-refinement.md).
+
+The README's Phase B section restructured into the five ordered chunks (B1-B5) with explicit hard-gate language and a "what not to build" callout pointing at the source spec.
+
+**Execution deferred to a future session** to avoid usage overruns in this one. The first code chunk when work resumes is **B1: per-case input schema mechanism** — rename `CaseTemplate.patient_factor_fields` → `input_schema`, write the YAML schema spec, build `manage.py import_case_templates` mirroring `import_modules.py`, author the HoLEP sample at `modules/cases/holep/case_template.yaml`, single migration. Detailed plan + verification list lives in the refinement doc.
+
+**Key invariants surfaced during planning, to capture when B1 actually ships:**
+
+- **Field `name` is a contract.** Once a YAML field's `name` is published, changing it silently invalidates any future briefings whose persisted resident input was keyed to the old name. Migration story for renames belongs to step B5 (telemetry / debrief) when submitted inputs start being persisted.
+- **Schema versioning is per-template, not per-schema.** If `input_schema`'s allowed types ever extend (e.g. adding `date`), there's no machine-readable signal that prior submissions used the old shape. Document the caveat inside `schemas/case_template.schema.yaml`.
+- **Layout: flat under `modules/cases/<case_type>/case_template.yaml`** (not specialty-nested), because the PoC is single-specialty per the scope doc.
+
+**Out of scope until B1 closes:** any frontend code, any briefing prompt / service changes, any telemetry-app scaffolding, a second case template. The refinement doc's "What not to build" section names additional non-goals across Phase B (no multi-step wizard, no notification systems beyond in-app, no calendar integration, no general-tutor follow-ups).
