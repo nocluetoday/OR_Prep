@@ -5,3 +5,4 @@ class WikiConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.wiki"
     label = "wiki"
+    verbose_name = "Knowledge base"

@@ -19,8 +19,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from django.conf import settings
-
+from .llm_config import get_stage_model, get_stage_provider
 from .providers import Message, Provider, get_provider
 
 
@@ -308,17 +307,17 @@ def run_ingest(
     deployment can mix Anthropic + LM Studio + OpenRouter across stages.
     """
 
-    propose_provider = get_provider(settings.LLM_INGEST_PROPOSE_PROVIDER)
-    audit_provider = get_provider(settings.LLM_INGEST_AUDIT_PROVIDER)
-    compose_provider = get_provider(settings.LLM_INGEST_COMPOSE_PROVIDER)
+    propose_provider = get_provider(get_stage_provider("ingest_propose"))
+    audit_provider = get_provider(get_stage_provider("ingest_audit"))
+    compose_provider = get_provider(get_stage_provider("ingest_compose"))
 
     result = IngestResult(
         propose_provider=propose_provider.name,
         audit_provider=audit_provider.name,
         compose_provider=compose_provider.name,
-        propose_model=settings.LLM_INGEST_PROPOSE_MODEL,
-        audit_model=settings.LLM_INGEST_AUDIT_MODEL,
-        compose_model=settings.LLM_INGEST_COMPOSE_MODEL,
+        propose_model=get_stage_model("ingest_propose"),
+        audit_model=get_stage_model("ingest_audit"),
+        compose_model=get_stage_model("ingest_compose"),
     )
 
     proposed, propose_usage = propose_claims(

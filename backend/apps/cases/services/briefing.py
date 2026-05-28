@@ -18,10 +18,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from django.conf import settings
-
 from apps.cases.models import CaseTemplate, SurgeonPreference
 from apps.wiki.models import Claim, ClaimAuditStatus
+from apps.wiki.services.llm_config import get_stage_model, get_stage_provider
 from apps.wiki.services.providers import (
     Message,
     ToolCall,
@@ -212,13 +211,14 @@ def generate_briefing(
         }
     )
 
-    # Per-CaseTemplate override wins over the global LLM_BRIEFING_* settings, so
+    # Per-CaseTemplate override wins over the LLMSettings/env defaults, so
     # high-stakes cases can pin Anthropic while exploratory cases can route to
-    # cheap local providers.
+    # cheap local providers. Without an override, fall through to admin-editable
+    # LLMSettings (then env LLM_BRIEFING_*).
     provider_kind = (case_template.briefing_provider_override or "").strip() \
-        or settings.LLM_BRIEFING_PROVIDER
+        or get_stage_provider("briefing")
     model = (case_template.briefing_model_override or "").strip() \
-        or settings.LLM_BRIEFING_MODEL
+        or get_stage_model("briefing")
     provider = get_provider(provider_kind)
 
     messages: list[Message] = [

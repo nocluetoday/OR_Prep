@@ -1,7 +1,27 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import Group
 
 from .models import User
+
+
+# Simplify the admin index: we don't use Group-based permissions (role-based
+# permissions via apps.users.permissions cover everything), and the JWT
+# blacklist tables are managed automatically by simplejwt on token rotation —
+# they aren't actionable from admin. Unregister so the index stays focused on
+# content authoring + LLM config.
+admin.site.unregister(Group)
+
+try:
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+
+    admin.site.unregister(BlacklistedToken)
+    admin.site.unregister(OutstandingToken)
+except (ImportError, admin.sites.NotRegistered):
+    pass
 
 
 @admin.register(User)
@@ -21,8 +41,6 @@ class UserAdmin(DjangoUserAdmin):
                     "is_active",
                     "is_staff",
                     "is_superuser",
-                    "groups",
-                    "user_permissions",
                 )
             },
         ),

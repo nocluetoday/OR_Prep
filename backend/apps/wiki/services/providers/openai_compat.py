@@ -19,8 +19,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from django.conf import settings
-
 from .base import (
     CompletionResponse,
     Message,
@@ -55,9 +53,6 @@ _OPENAI_PRICING: dict[str, _Pricing] = {
 class _BackendConfig:
     kind: str
     default_base_url: str
-    api_key_setting: str
-    base_url_setting: str | None  # which Django setting overrides the base URL
-    api_key_fallback: str  # used if setting is unset/blank (e.g. LM Studio's "lm-studio")
     free: bool
     pricing: dict[str, _Pricing] = field(default_factory=dict)
 
@@ -66,26 +61,17 @@ _CONFIGS: dict[str, _BackendConfig] = {
     "openai": _BackendConfig(
         kind="openai",
         default_base_url="https://api.openai.com/v1",
-        api_key_setting="OPENAI_API_KEY",
-        base_url_setting="OPENAI_BASE_URL",
-        api_key_fallback="",
         free=False,
         pricing=_OPENAI_PRICING,
     ),
     "lmstudio": _BackendConfig(
         kind="lmstudio",
         default_base_url="http://localhost:1234/v1",
-        api_key_setting="LMSTUDIO_API_KEY",
-        base_url_setting="LMSTUDIO_BASE_URL",
-        api_key_fallback="lm-studio",
         free=True,
     ),
     "openrouter": _BackendConfig(
         kind="openrouter",
         default_base_url="https://openrouter.ai/api/v1",
-        api_key_setting="OPENROUTER_API_KEY",
-        base_url_setting="OPENROUTER_BASE_URL",
-        api_key_fallback="",
         free=False,
         # OpenRouter pricing varies per upstream model; the API reports actual
         # cost in `usage`. Local pricing table left empty; estimate returns 0.
@@ -107,11 +93,14 @@ class OpenAICompatibleProvider(Provider):
         return self._cfg.kind
 
     def _client(self):
-        key = getattr(settings, self._cfg.api_key_setting, "") or self._cfg.api_key_fallback
+        from apps.wiki.services.llm_config import get_api_key, get_base_url
+
+        key = get_api_key(self._cfg.kind)
         if not key:
             raise ProviderConfigurationError(
-                f"{self._cfg.api_key_setting} is unset (provider={self._cfg.kind}). "
-                f"Add it to backend/.env before running with this provider."
+                f"API key for provider={self._cfg.kind} is not configured. Set "
+                f"it in Django admin (LLM settings) or as the matching env var "
+                f"in backend/.env."
             )
         try:
             from openai import OpenAI  # type: ignore[import-not-found]
@@ -119,11 +108,7 @@ class OpenAICompatibleProvider(Provider):
             raise ProviderConfigurationError(
                 "openai package not installed. Run `pip install -r requirements.txt`."
             ) from e
-        base_url = (
-            getattr(settings, self._cfg.base_url_setting, None)
-            if self._cfg.base_url_setting
-            else None
-        ) or self._cfg.default_base_url
+        base_url = get_base_url(self._cfg.kind) or self._cfg.default_base_url
         return OpenAI(api_key=key, base_url=base_url)
 
     def complete(

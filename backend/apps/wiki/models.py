@@ -1,6 +1,19 @@
+import base64
+import hashlib
+
+from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.db import models
 from simple_history.models import HistoricalRecords
+
+
+def _llm_settings_fernet() -> Fernet:
+    """Derive a Fernet key from DJANGO_SECRET_KEY for at-rest encryption of LLM API
+    keys stored in the admin. Rotating SECRET_KEY invalidates all stored keys —
+    that's documented in the LLMSettings admin help text."""
+
+    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
 
 
 class WikiPageStatus(models.TextChoices):
@@ -260,3 +273,100 @@ class Claim(models.Model):
             ClaimAuditStatus.AUDITED_OK,
             ClaimAuditStatus.PUBLISHED,
         )
+
+
+_PROVIDER_KINDS = ("anthropic", "openai", "lmstudio", "openrouter")
+
+
+class LLMSettings(models.Model):
+    """Singleton: admin-editable LLM configuration that overrides environment vars.
+
+    Faculty configure providers, models, and API keys through Django admin
+    instead of editing `.env`. Each field falls back to the corresponding env
+    var when blank, so an unconfigured install still works from `.env`.
+
+    API keys are stored encrypted at rest via Fernet (key derived from
+    `DJANGO_SECRET_KEY`). They are never displayed in admin; the form is
+    write-only. Rotating `DJANGO_SECRET_KEY` invalidates all stored keys —
+    re-enter them after a key rotation.
+
+    Singleton enforcement: `save()` pins `pk=1`. `get_singleton()` returns the
+    one-and-only row, creating it if absent.
+    """
+
+    # Per-stage provider routing. Blank string = fall back to env LLM_*_PROVIDER.
+    briefing_provider = models.CharField(max_length=32, blank=True)
+    briefing_model = models.CharField(max_length=128, blank=True)
+    ingest_propose_provider = models.CharField(max_length=32, blank=True)
+    ingest_propose_model = models.CharField(max_length=128, blank=True)
+    ingest_audit_provider = models.CharField(max_length=32, blank=True)
+    ingest_audit_model = models.CharField(max_length=128, blank=True)
+    ingest_compose_provider = models.CharField(max_length=32, blank=True)
+    ingest_compose_model = models.CharField(max_length=128, blank=True)
+
+    # Encrypted API keys (Fernet ciphertext, base64-encoded strings). Empty = fall
+    # back to env *_API_KEY. The model's admin form never displays these; it
+    # exposes write-only password fields and encrypts on save.
+    anthropic_api_key_enc = models.TextField(blank=True)
+    openai_api_key_enc = models.TextField(blank=True)
+    openrouter_api_key_enc = models.TextField(blank=True)
+    lmstudio_api_key_enc = models.TextField(blank=True)
+
+    # Custom base URLs (per-provider). Blank = fall back to env *_BASE_URL.
+    openai_base_url = models.CharField(max_length=255, blank=True)
+    lmstudio_base_url = models.CharField(max_length=255, blank=True)
+    openrouter_base_url = models.CharField(max_length=255, blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_llm_settings",
+    )
+
+    history = HistoricalRecords()
+
+    class Meta:
+        verbose_name = "LLM settings"
+        verbose_name_plural = "LLM settings"
+
+    def __str__(self) -> str:
+        return "LLM settings"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton: only ever one row, at pk=1.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_singleton(cls) -> "LLMSettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    # --- Encrypted API key access ---------------------------------------------
+
+    def get_api_key(self, provider: str) -> str:
+        """Return the decrypted API key for a provider, or empty string if unset."""
+        if provider not in _PROVIDER_KINDS:
+            return ""
+        enc = getattr(self, f"{provider}_api_key_enc", "") or ""
+        if not enc:
+            return ""
+        try:
+            return _llm_settings_fernet().decrypt(enc.encode()).decode()
+        except InvalidToken:
+            # Likely SECRET_KEY was rotated; treat as unset and let the caller
+            # fall back to env. Faculty re-enters the key after a rotation.
+            return ""
+
+    def set_api_key(self, provider: str, plaintext: str) -> None:
+        """Encrypt and store an API key. Empty plaintext clears the field."""
+        if provider not in _PROVIDER_KINDS:
+            return
+        if not plaintext:
+            setattr(self, f"{provider}_api_key_enc", "")
+            return
+        ciphertext = _llm_settings_fernet().encrypt(plaintext.encode()).decode()
+        setattr(self, f"{provider}_api_key_enc", ciphertext)

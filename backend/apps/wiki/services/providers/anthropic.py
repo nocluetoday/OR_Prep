@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.conf import settings
-
 from .base import (
     CompletionResponse,
     Message,
@@ -46,11 +44,13 @@ class AnthropicProvider(Provider):
         return "anthropic"
 
     def _client(self):
-        if not settings.ANTHROPIC_API_KEY:
+        from apps.wiki.services.llm_config import get_api_key
+
+        api_key = get_api_key("anthropic")
+        if not api_key:
             raise ProviderConfigurationError(
-                "ANTHROPIC_API_KEY is unset. Add it to backend/.env (or "
-                "docker/.env for compose) before running ingest or briefing "
-                "commands with the anthropic provider."
+                "Anthropic API key not configured. Set it in Django admin "
+                "(LLM settings) or as ANTHROPIC_API_KEY in backend/.env."
             )
         try:
             import anthropic  # type: ignore[import-not-found]
@@ -58,7 +58,7 @@ class AnthropicProvider(Provider):
             raise ProviderConfigurationError(
                 "anthropic package not installed. Run `pip install -r requirements.txt`."
             ) from e
-        return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        return anthropic.Anthropic(api_key=api_key)
 
     def complete(
         self,

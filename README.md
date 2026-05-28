@@ -72,9 +72,11 @@ Four phases with definitions of done in [OR Procedural Case Prep.md](OR%20Proced
 - [x] Per-`CaseTemplate` override for the briefing stage (admin-editable).
 - [x] Anthropic prompt caching on system prompt + static-catalog content blocks; cache-hit tokens flow into cost estimate.
 - [x] OpenRouter cost-from-response (authoritative `usage.cost` instead of local pricing estimate).
+- [x] Admin-editable LLM settings: per-stage provider+model + Fernet-encrypted API keys at `/admin/wiki/llmsettings/`. Singleton, write-only key fields, env vars as fallback.
+- [x] Admin index cleanup: legacy `apps.modules` admin and `auth.Group` / JWT-blacklist clutter unregistered; AppConfig verbose names tightened to four clean sections (Case authoring, Knowledge base, Source documents, Users).
 
 **Phase A close — TODO. Mostly content + config work, not code:**
-- [ ] **Drop `ANTHROPIC_API_KEY=…` into `backend/.env`** (or set the `LLM_INGEST_*_PROVIDER`/`LLM_BRIEFING_PROVIDER` env vars to route to LM Studio / OpenAI / OpenRouter, plus the matching key + model).
+- [ ] **Configure LLM provider + API key.** Either in Django admin at `/admin/wiki/llmsettings/` (encrypted at rest; recommended for non-engineers) or as env vars in `backend/.env`. The default is Anthropic Sonnet 4.6 for everything; per-stage overrides let you mix backends (e.g. local LM Studio for ingest propose, Anthropic Opus for audit).
 - [ ] **Author the real HoLEP `CaseTemplate` in Django admin** at `/admin/cases/casetemplate/`: case_type, title, summary, anatomy_focus, decision_points, complication_patterns, attending_question_categories, patient_factor_fields. There's a placeholder smoke-test row at id=1 you can either edit or delete.
 - [ ] **Bump your superuser role to `faculty`** at `/admin/users/user/` (created earlier via `createsuperuser`; default role is `resident`). Add a `SurgeonPreference` row attached to the HoLEP CaseTemplate.
 - [ ] **Ingest one reviewed source PDF** (AUA HoLEP guideline preferred; any reviewed source works for the first pass). Review the proposed Claims at `/admin/wiki/claim/` and set `audit_status=published` on the ones that pass.

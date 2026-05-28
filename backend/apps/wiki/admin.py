@@ -1,7 +1,10 @@
 from django.contrib import admin
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import Claim, IngestRun, WikiPage
+from .forms import LLMSettingsForm
+from .models import Claim, IngestRun, LLMSettings, WikiPage
 
 
 class ClaimInline(admin.TabularInline):
@@ -27,6 +30,92 @@ class WikiPageAdmin(SimpleHistoryAdmin):
     readonly_fields = ("created_at", "updated_at", "approved_at")
     filter_horizontal = ("source_documents",)
     inlines = [ClaimInline]
+
+
+@admin.register(LLMSettings)
+class LLMSettingsAdmin(SimpleHistoryAdmin):
+    """Singleton admin: one row, write-only API key fields, redirected from the
+    changelist straight to the edit page."""
+
+    form = LLMSettingsForm
+    readonly_fields = ("updated_at", "updated_by")
+    fieldsets = (
+        (
+            "Briefing stage",
+            {
+                "fields": ("briefing_provider", "briefing_model"),
+                "description": (
+                    "Per-CaseTemplate overrides take precedence over these. "
+                    "Leave blank to fall through to env LLM_BRIEFING_*."
+                ),
+            },
+        ),
+        (
+            "Ingest stages",
+            {
+                "fields": (
+                    "ingest_propose_provider",
+                    "ingest_propose_model",
+                    "ingest_audit_provider",
+                    "ingest_audit_model",
+                    "ingest_compose_provider",
+                    "ingest_compose_model",
+                ),
+                "description": (
+                    "Mix providers across stages — e.g. local LM Studio for "
+                    "propose (cheap), Anthropic Opus for audit (strict)."
+                ),
+            },
+        ),
+        (
+            "API keys",
+            {
+                "fields": (
+                    "anthropic_api_key",
+                    "openai_api_key",
+                    "openrouter_api_key",
+                    "lmstudio_api_key",
+                ),
+                "description": (
+                    "Encrypted at rest with a Fernet key derived from "
+                    "DJANGO_SECRET_KEY. Rotating SECRET_KEY invalidates "
+                    "stored keys — re-enter them after a rotation. Fields "
+                    "are write-only: existing values are never displayed."
+                ),
+            },
+        ),
+        (
+            "Base URLs",
+            {
+                "fields": ("openai_base_url", "lmstudio_base_url", "openrouter_base_url"),
+                "description": (
+                    "Override the default API endpoint per provider. Blank "
+                    "uses the provider default (e.g. LM Studio defaults to "
+                    "http://localhost:1234/v1)."
+                ),
+            },
+        ),
+        ("Provenance", {"fields": ("updated_at", "updated_by")}),
+    )
+
+    def has_add_permission(self, request):
+        # Singleton: only allow creation if no row exists yet. Even then the
+        # changelist redirect below normally creates the row on first visit.
+        return not LLMSettings.objects.filter(pk=1).exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        # Skip the list view and land on the singleton's edit page directly.
+        obj = LLMSettings.get_singleton()
+        return HttpResponseRedirect(
+            reverse("admin:wiki_llmsettings_change", args=(obj.pk,))
+        )
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(IngestRun)
