@@ -208,3 +208,22 @@ All B1 code work landed against the [approved plan](resident-ux-refinement.md#st
 **Detail worth noting for B2:** the importer's `update_or_create` followed by a field-by-field comparison against the prior snapshot is what lets it distinguish `updated` from `unchanged` — keeps re-imports honest about whether anything actually changed. If B2 starts touching CaseTemplate from the web side, that comparison stays valid because the API and the importer write the same defaults dict.
 
 **B1 hard gate is still open** until Don runs the full flow end-to-end: `import_case_templates` → create his faculty user + Neff `SurgeonPreference` row → ingest a reviewed source PDF → run `generate_briefing --case holep --factors '...' --surgeon ...` and confirm the resident-input dict flows into the briefing prompt with the expected keys. **Do not start B2 until that gate passes.**
+
+## 2026-05-28 — Future: LLM-interviewed SurgeonPreference authoring (parallel track, do not preempt B1–B5)
+
+Surfaced during B1 hard-gate prep when Don pointed out that a published source (AUA guideline, technique paper) only gives the resident the generalizable baseline — it can't tell them anything about his specific case style. That's exactly the content split between `WikiPage` claims (cited published evidence) and `SurgeonPreference` rows (attributable personal preference), and the briefing already renders them as separate sections.
+
+Where it falls apart: the only current path to populate `SurgeonPreference.preferences` is "type structured JSON into the admin form" (`/admin/cases/surgeonpreference/`). That's a usability dead-end. No attending will do it, and the friction blocks (a) onboarding additional faculty, (b) Don himself from authoring preferences across more than one case type.
+
+**Proposal:** a faculty-facing chat surface where a frontier LLM (Opus or Sonnet — interview quality requires it, local models won't do) conducts a structured interview against the case template's `decision_points`, `complication_patterns`, and `attending_question_categories`. For HoLEP that's roughly "For each of these five decision points, what's your default and why?" plus follow-ups. The LLM proposes a structured `preferences` JSON; the surgeon reviews and edits inline; commit writes the row.
+
+**Design constraints to honor when this lands:**
+- Frontier model required. Cost is bounded because this is one-time-per-attending-per-case-template.
+- Reviewable before commit — surgeon edits the structured output, not auto-save. Editing happens against the structured list, not the chat transcript.
+- Faculty-gated (role=faculty). Residents do not author surgeon preferences.
+- Case template's `decision_points` are the interview spine, plus a free-form bucket for items that don't map to a decision point (room setup, antibiotic protocol, "what I expect from a resident by case N").
+- Audit: `simple-history` already covers the resulting `SurgeonPreference` row. Consider also logging the interview transcript itself in a sibling model (parallel to `IngestRun`) so the structured output can be traced back to the conversation that produced it.
+
+**Sister item (related, also a usability bet):** mirror `import_case_templates` with a `surgeon_preferences.yaml` importer under `modules/cases/<case_type>/surgeon_preferences/<surgeon_email>.yaml`. Same problem (admin tedium), different solution (file-based authoring for users who prefer text editors). Both paths write to the same model; an attending picks whichever ergonomics they prefer.
+
+**Sequencing constraint.** This is Phase C–parallel "authoring polish," not in the resident-experience flow. It comes **after** B1–B5 ship and Don has tested the resident-facing briefing surface end-to-end. The resident experience must work first; then we reduce authoring friction. Do not let this preempt the existing roadmap.

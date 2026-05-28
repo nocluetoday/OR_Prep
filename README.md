@@ -143,6 +143,13 @@ Per refinement spec — see [docs/resident-ux-refinement.md](docs/resident-ux-re
 - Sharing or export beyond the equipment checklist screenshot.
 - Anything that turns this into a general tutor in the follow-up turns.
 
+### Authoring polish (parallel track; not started; do not preempt B1–B5)
+
+Friction reducers for getting attending content into the system. Out of the resident-experience flow and explicitly **after** B5 ships. Both items target `SurgeonPreference` (and possibly `CaseTemplate`) authoring.
+
+- [ ] **LLM-interviewed `SurgeonPreference` authoring.** Faculty-facing chat surface where a frontier LLM (Opus / Sonnet — interview quality matters, local models won't do) walks the surgeon through the case template's `decision_points`, `complication_patterns`, and `attending_question_categories`. Proposes a structured `preferences` JSON; surgeon reviews + edits inline; commit writes the row. Faculty-gated. Optional: log the chat transcript in a sibling-of-`IngestRun` model for traceability. Rationale + design constraints captured in [docs/journal.md (2026-05-28)](docs/journal.md).
+- [ ] **`surgeon_preferences.yaml` importer** mirroring `import_case_templates` for attendings who prefer text editors over chat. Same model, alternate ergonomics.
+
 ### Phase C — Beta and post-case debrief (not started)
 
 - [ ] Minimal VPS deploy: Docker Compose + Caddy + Let's Encrypt + daily Postgres dump.
