@@ -171,12 +171,17 @@ def propose_claims(
     provider: Provider,
     model: str,
 ) -> tuple[list[ProposedClaim], "ProviderUsageSummary"]:
+    # cache=True on the document text + cache_system=True: the audit pass that
+    # follows hits the same document_text within Anthropic's 5-minute ephemeral
+    # window and reads it from cache, paying ~10% of the input price for the
+    # bulk of the prompt.
     response = provider.complete(
         model=model,
         system=PROPOSE_SYSTEM_PROMPT,
-        messages=[Message(role="user", text=document_text)],
+        messages=[Message(role="user", text=document_text, cache=True)],
         max_tokens=4096,
         json_mode=True,
+        cache_system=True,
     )
     payload = _strict_json_loads(response.text)
     claims = [
@@ -200,24 +205,33 @@ def audit_claims(
     provider: Provider,
     model: str,
 ) -> tuple[list[ClaimVerdict], "ProviderUsageSummary"]:
-    payload = {
-        "document_text": document_text,
-        "claims": [
-            {
-                "claim_id": c.claim_id,
-                "statement": c.statement,
-                "source_quote": c.source_quote,
-                "source_locator": c.source_locator,
-            }
-            for c in proposed
-        ],
-    }
+    # Split into two user messages so the document_text — already cached by the
+    # propose pass — gets cache_control on its own block; the variable
+    # claims-to-audit list lives in a separate (uncached) block.
+    static_payload = json.dumps({"document_text": document_text})
+    variable_payload = json.dumps(
+        {
+            "claims": [
+                {
+                    "claim_id": c.claim_id,
+                    "statement": c.statement,
+                    "source_quote": c.source_quote,
+                    "source_locator": c.source_locator,
+                }
+                for c in proposed
+            ]
+        }
+    )
     response = provider.complete(
         model=model,
         system=AUDIT_SYSTEM_PROMPT,
-        messages=[Message(role="user", text=json.dumps(payload))],
+        messages=[
+            Message(role="user", text=static_payload, cache=True),
+            Message(role="user", text=variable_payload),
+        ],
         max_tokens=4096,
         json_mode=True,
+        cache_system=True,
     )
     parsed = _strict_json_loads(response.text)
     verdicts = [
@@ -258,6 +272,7 @@ def compose_page(
         system=COMPOSE_SYSTEM_PROMPT,
         messages=[Message(role="user", text=json.dumps(payload))],
         max_tokens=4096,
+        cache_system=True,
     )
     return response.text.strip(), _summary(provider, model, response)
 

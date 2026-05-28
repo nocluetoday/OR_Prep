@@ -135,6 +135,7 @@ class OpenAICompatibleProvider(Provider):
         tools: list[ToolSpec] | None = None,
         max_tokens: int = 4096,
         json_mode: bool = False,
+        cache_system: bool = False,  # noqa: ARG002 — no explicit cache API for chat completions
     ) -> CompletionResponse:
         client = self._client()
         kwargs: dict = {
@@ -158,6 +159,9 @@ class OpenAICompatibleProvider(Provider):
             # OpenAI's response_format conflicts with tool use on some backends.
             # Only enable when we're calling without tools (propose / audit / compose).
             kwargs["response_format"] = {"type": "json_object"}
+        if self._cfg.kind == "openrouter":
+            # OpenRouter only reports actual spend when usage.include is requested.
+            kwargs["extra_body"] = {"usage": {"include": True}}
 
         resp = client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
@@ -173,6 +177,9 @@ class OpenAICompatibleProvider(Provider):
 
         usage_in = getattr(resp.usage, "prompt_tokens", 0) or 0
         usage_out = getattr(resp.usage, "completion_tokens", 0) or 0
+        actual_cost = (
+            _extract_openrouter_cost(resp.usage) if self._cfg.kind == "openrouter" else None
+        )
 
         stop = "tool_use" if choice.finish_reason == "tool_calls" else (
             "max_tokens" if choice.finish_reason == "length" else "end"
@@ -180,12 +187,26 @@ class OpenAICompatibleProvider(Provider):
         return CompletionResponse(
             text=text,
             tool_calls=tool_calls,
-            usage=Usage(input_tokens=usage_in, output_tokens=usage_out),
+            usage=Usage(
+                input_tokens=usage_in,
+                output_tokens=usage_out,
+                actual_cost_usd=actual_cost,
+            ),
             stop_reason=stop,
             model=resp.model,
         )
 
     def estimate_cost_usd(self, model: str, usage: Usage) -> float:
+        # Cache-hit accounting on OpenAI-compatible backends is provider-side
+        # only — OpenAI applies automatic caching on long prompts and reports
+        # the savings on its dashboard; OpenRouter folds it into usage.cost;
+        # LM Studio is free. The local pricing fallback below does NOT subtract
+        # cached_input_tokens (no cached-price column in the OpenAI pricing
+        # struct), so its estimate is an upper bound. Use the provider's
+        # dashboard for authoritative spend on OpenAI; trust the reported
+        # usage.cost value for OpenRouter.
+        if usage.actual_cost_usd is not None:
+            return usage.actual_cost_usd
         if self._cfg.free:
             return 0.0
         pricing = self._cfg.pricing.get(model)
@@ -195,6 +216,39 @@ class OpenAICompatibleProvider(Provider):
             (usage.input_tokens / 1_000_000) * pricing.input_per_mtok
             + (usage.output_tokens / 1_000_000) * pricing.output_per_mtok
         )
+
+
+def _extract_openrouter_cost(usage_obj) -> float | None:
+    """OpenRouter returns actual USD spend as `usage.cost` when `usage.include=true`
+    is requested. The openai SDK preserves unknown fields differently across
+    versions; check the obvious access paths and return the first hit."""
+
+    if usage_obj is None:
+        return None
+    direct = getattr(usage_obj, "cost", None)
+    if direct is not None:
+        try:
+            return float(direct)
+        except (TypeError, ValueError):
+            pass
+    extra = getattr(usage_obj, "model_extra", None) or {}
+    if "cost" in extra:
+        try:
+            return float(extra["cost"])
+        except (TypeError, ValueError):
+            pass
+    dump = getattr(usage_obj, "model_dump", None)
+    if callable(dump):
+        try:
+            d = dump()
+        except Exception:
+            d = None
+        if isinstance(d, dict) and "cost" in d:
+            try:
+                return float(d["cost"])
+            except (TypeError, ValueError):
+                pass
+    return None
 
 
 def _to_openai_messages(system: str, messages: list[Message]) -> list[dict]:

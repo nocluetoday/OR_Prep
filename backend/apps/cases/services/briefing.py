@@ -99,9 +99,11 @@ class BriefingResult:
     rejected_cites: list[dict] = field(default_factory=list)
     tokens_in: int = 0
     tokens_out: int = 0
+    cached_tokens_in: int = 0
     cost_usd: float = 0.0
     model: str = ""
     provider: str = ""
+    no_tool_calls_warning: bool = False
 
 
 def _load_publishable_claims(case_template: CaseTemplate) -> dict[str, Claim]:
@@ -188,38 +190,66 @@ def generate_briefing(
     """
 
     claims_by_id = _load_publishable_claims(case_template)
+    has_publishable_claims = bool(claims_by_id)
 
-    user_payload = {
-        "case_template": _serialize_case_template(case_template),
-        "surgeon_preferences": _serialize_surgeon_preferences(surgeon_preferences),
-        "patient_factors": patient_factors,
-        "surgeon_email": surgeon_email,
-        "time_minutes": time_minutes,
-        "focus_text": focus_text,
-        "available_claims": _serialize_claims_for_prompt(claims_by_id),
-    }
+    # Static payload — the case template + surgeon prefs + claim catalog. Repeats
+    # across briefings on the same case, so we cache it. Variable payload — the
+    # resident's per-request inputs — never repeats. Split into two messages so
+    # the cache breakpoint can land on the static block only.
+    static_payload = json.dumps(
+        {
+            "case_template": _serialize_case_template(case_template),
+            "surgeon_preferences": _serialize_surgeon_preferences(surgeon_preferences),
+            "available_claims": _serialize_claims_for_prompt(claims_by_id),
+        }
+    )
+    variable_payload = json.dumps(
+        {
+            "patient_factors": patient_factors,
+            "surgeon_email": surgeon_email,
+            "time_minutes": time_minutes,
+            "focus_text": focus_text,
+        }
+    )
 
-    provider = get_provider(settings.LLM_BRIEFING_PROVIDER)
-    model = settings.LLM_BRIEFING_MODEL
+    # Per-CaseTemplate override wins over the global LLM_BRIEFING_* settings, so
+    # high-stakes cases can pin Anthropic while exploratory cases can route to
+    # cheap local providers.
+    provider_kind = (case_template.briefing_provider_override or "").strip() \
+        or settings.LLM_BRIEFING_PROVIDER
+    model = (case_template.briefing_model_override or "").strip() \
+        or settings.LLM_BRIEFING_MODEL
+    provider = get_provider(provider_kind)
 
-    messages: list[Message] = [Message(role="user", text=json.dumps(user_payload))]
+    messages: list[Message] = [
+        Message(role="user", text=static_payload, cache=True),
+        Message(role="user", text=variable_payload),
+    ]
     cited_ids: set[str] = set()
     validated: list[ValidatedCitation] = []
     rejected: list[dict] = []
     final_text_parts: list[str] = []
     totals = Usage()
+    any_tool_call_ever = False
     model_reported = model
 
     for _ in range(8):
+        # cache_system=True is intentional on every iteration: Anthropic needs
+        # the cache_control marker on each request to consult the cache for
+        # that prefix. Turn 1 is a cache write (~1.25x cost); turns 2..N within
+        # the 5-minute ephemeral window are cache reads (~0.1x cost) for the
+        # static system prompt + static-catalog user block at position [0].
         response = provider.complete(
             model=model,
             system=BRIEFING_SYSTEM_PROMPT,
             messages=messages,
             tools=[CITE_TOOL_SPEC],
             max_tokens=8192,
+            cache_system=True,
         )
         totals.input_tokens += response.usage.input_tokens
         totals.output_tokens += response.usage.output_tokens
+        totals.cached_input_tokens += response.usage.cached_input_tokens
         model_reported = response.model or model
 
         if response.text:
@@ -227,6 +257,7 @@ def generate_briefing(
 
         if not response.tool_calls:
             break
+        any_tool_call_ever = True
 
         # Echo the assistant's turn back into the conversation so the model sees
         # the prior tool_use blocks on the next call (required by both Anthropic
@@ -282,16 +313,30 @@ def generate_briefing(
         if response.stop_reason != "tool_use":
             break
 
-    markdown = _render_markdown("".join(final_text_parts), validated, rejected)
+    # If the model never called the cite tool but published claims existed,
+    # the configured model almost certainly does not support function calling
+    # (common with local LM Studio models). Surface this loudly so the briefing
+    # is not mistaken for a validated artifact.
+    no_tools_warning = has_publishable_claims and not any_tool_call_ever
+
+    markdown = _render_markdown(
+        "".join(final_text_parts),
+        validated,
+        rejected,
+        no_tools_warning=no_tools_warning,
+        provider_name=provider.name,
+    )
     return BriefingResult(
         markdown=markdown,
         citations=validated,
         rejected_cites=rejected,
         tokens_in=totals.input_tokens,
         tokens_out=totals.output_tokens,
+        cached_tokens_in=totals.cached_input_tokens,
         cost_usd=provider.estimate_cost_usd(model, totals),
         model=model_reported,
         provider=provider.name,
+        no_tool_calls_warning=no_tools_warning,
     )
 
 
@@ -299,8 +344,23 @@ def _render_markdown(
     body: str,
     citations: list[ValidatedCitation],
     rejected: list[dict],
+    *,
+    no_tools_warning: bool = False,
+    provider_name: str = "",
 ) -> str:
-    parts = [body.rstrip()]
+    parts: list[str] = []
+    if no_tools_warning:
+        parts.append(
+            "> **⚠ Citation validation failed.** The configured model "
+            f"(`{provider_name}`) did not call the `cite()` tool for any "
+            "statement in this briefing. This typically means the model does "
+            "not support function calling (common for many local LM Studio "
+            "models). **No factual statement in this briefing has been "
+            "validated against a published claim** — treat this as an "
+            "unsupported draft, not a citable briefing. Re-run with a "
+            "tool-calling model (Anthropic, OpenAI, or a capable local model).\n"
+        )
+    parts.append(body.rstrip())
     if citations:
         parts.append("\n\n## Sources\n")
         for i, c in enumerate(citations, start=1):

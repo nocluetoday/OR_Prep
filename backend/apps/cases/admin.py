@@ -43,6 +43,18 @@ class CaseTemplateAdmin(SimpleHistoryAdmin):
                 ),
             },
         ),
+        (
+            "Briefing provider override (optional)",
+            {
+                "fields": ("briefing_provider_override", "briefing_model_override"),
+                "description": (
+                    "If both fields are left blank, the briefing CLI uses "
+                    "LLM_BRIEFING_PROVIDER and LLM_BRIEFING_MODEL from settings. "
+                    "Set these to pin a specific backend for this case (e.g. "
+                    "anthropic + claude-sonnet-4-6 for high-stakes cases)."
+                ),
+            },
+        ),
         ("Provenance", {"fields": ("created_at", "updated_at")}),
     )
 

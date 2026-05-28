@@ -69,6 +69,7 @@ class AnthropicProvider(Provider):
         tools: list[ToolSpec] | None = None,
         max_tokens: int = 4096,
         json_mode: bool = False,  # noqa: ARG002 — Anthropic enforces JSON via prompt
+        cache_system: bool = False,
     ) -> CompletionResponse:
         client = self._client()
         kwargs: dict = {
@@ -77,7 +78,16 @@ class AnthropicProvider(Provider):
             "messages": _to_anthropic_messages(messages),
         }
         if system:
-            kwargs["system"] = system
+            if cache_system:
+                kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                kwargs["system"] = system
         if tools:
             kwargs["tools"] = [
                 {
@@ -99,6 +109,12 @@ class AnthropicProvider(Provider):
                     ToolCall(id=block.id, name=block.name, input=dict(block.input))
                 )
 
+        # Pull cache-hit token counts out of the usage block. The Anthropic SDK
+        # exposes cache_read_input_tokens (cache hits) and
+        # cache_creation_input_tokens (writes); the read count is what gets the
+        # cached-input price discount.
+        cached_input = getattr(msg.usage, "cache_read_input_tokens", 0) or 0
+
         stop = _normalize_stop_reason(msg.stop_reason)
         return CompletionResponse(
             text="".join(text_parts),
@@ -106,12 +122,15 @@ class AnthropicProvider(Provider):
             usage=Usage(
                 input_tokens=msg.usage.input_tokens,
                 output_tokens=msg.usage.output_tokens,
+                cached_input_tokens=cached_input,
             ),
             stop_reason=stop,
             model=msg.model,
         )
 
     def estimate_cost_usd(self, model: str, usage: Usage) -> float:
+        if usage.actual_cost_usd is not None:
+            return usage.actual_cost_usd
         pricing = _PRICING.get(model)
         if pricing is None:
             return 0.0
@@ -124,12 +143,25 @@ class AnthropicProvider(Provider):
 
 
 def _to_anthropic_messages(messages: list[Message]) -> list[dict]:
-    out: list[dict] = []
+    """Convert provider-agnostic Messages to Anthropic format.
+
+    Consecutive same-role messages are merged into one provider message with
+    multiple content blocks. This is how prompt caching breakpoints get
+    expressed: caller splits a static-cacheable prefix from variable input
+    into two Messages; converter emits one Anthropic message with two text
+    blocks, with cache_control on the cacheable one only.
+    """
+
+    # First pass: build (role, blocks) tuples per Message.
+    per_message: list[tuple[str, list[dict]]] = []
     for m in messages:
         if m.role == "assistant":
             blocks: list[dict] = []
             if m.text:
-                blocks.append({"type": "text", "text": m.text})
+                block: dict = {"type": "text", "text": m.text}
+                if m.cache:
+                    block["cache_control"] = {"type": "ephemeral"}
+                blocks.append(block)
             for tc in m.tool_calls:
                 blocks.append(
                     {
@@ -144,23 +176,35 @@ def _to_anthropic_messages(messages: list[Message]) -> list[dict]:
                 # our loops (we only append assistant when tool_calls is set or
                 # text is non-empty), but guard so a buggy caller fails clearly.
                 continue
-            out.append({"role": "assistant", "content": blocks})
+            per_message.append(("assistant", blocks))
         else:  # user (plain text or tool results)
             if m.tool_results:
-                blocks = []
+                tr_blocks: list[dict] = []
                 for tr in m.tool_results:
-                    block: dict = {
+                    block = {
                         "type": "tool_result",
                         "tool_use_id": tr.tool_call_id,
                         "content": tr.content,
                     }
                     if tr.is_error:
                         block["is_error"] = True
-                    blocks.append(block)
-                out.append({"role": "user", "content": blocks})
+                    tr_blocks.append(block)
+                per_message.append(("user", tr_blocks))
             else:
-                out.append({"role": "user", "content": m.text})
-    return out
+                block = {"type": "text", "text": m.text}
+                if m.cache:
+                    block["cache_control"] = {"type": "ephemeral"}
+                per_message.append(("user", [block]))
+
+    # Second pass: merge consecutive same-role messages so cache markers across
+    # adjacent Messages become multi-block content on a single Anthropic message.
+    merged: list[dict] = []
+    for role, blocks in per_message:
+        if merged and merged[-1]["role"] == role:
+            merged[-1]["content"].extend(blocks)
+        else:
+            merged.append({"role": role, "content": list(blocks)})
+    return merged
 
 
 def _normalize_stop_reason(raw: str | None) -> str:

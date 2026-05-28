@@ -112,3 +112,39 @@ Defaults: all `anthropic`, Sonnet 4.6 everywhere except audit (Opus 4.7). The ol
 - Per-CaseTemplate provider override so high-stakes cases can pin Anthropic while exploratory cases can use cheap local models.
 - Prompt caching for Anthropic (deferred from earlier; still relevant).
 - Settings UI in admin so non-engineers can swap providers without editing env files.
+
+## 2026-05-26 — Provider abstraction (chunk 2)
+
+**Four chunk-2 deferred items landed; one deferred again.**
+
+**1. Anthropic prompt caching.** `Message` gained a `cache: bool` field and `Provider.complete()` gained `cache_system: bool`. The AnthropicProvider applies `cache_control: {"type": "ephemeral"}` to the system block when `cache_system=True`, and to per-message content blocks when `Message.cache=True`. The converter now also merges consecutive same-role Messages into one Anthropic message with multiple content blocks — this is the mechanism that lets callers split a static-cacheable prefix from variable input across two Messages and have it emerge as one user message with one cached + one uncached text block. Cache-hit token counts (`cache_read_input_tokens`) flow into `Usage.cached_input_tokens` so the per-call cost estimate picks up the discount.
+
+OpenAI-compat providers ignore both flags (no explicit cache API for chat completions; OpenAI does automatic caching server-side on long prompts).
+
+Cache targets wired:
+- **Ingest propose**: document_text user message + system. (Audit pass benefits — same text within 5 min hits cache.)
+- **Ingest audit**: document_text split off into its own cacheable message, claims list in a separate uncached message. System cached.
+- **Ingest compose**: system cached. (User content is variable per ingest; not worth caching.)
+- **Briefing**: case_template + surgeon_preferences + available_claims (the static catalog that repeats across briefings on the same case) in one cacheable message; patient_factors + surgeon_email + time + focus in a separate uncached message. System cached. Each subsequent tool-loop turn rides on the same cached catalog.
+
+Expected impact at the $100/month cap: briefing repeats on the same case within 5 minutes pay ~10% of input price on the catalog block (typically 80%+ of the briefing input). This is the difference between caching being a nice-to-have and a meaningful budget line.
+
+**2. Per-CaseTemplate provider override.** `CaseTemplate.briefing_provider_override` and `CaseTemplate.briefing_model_override` (CharFields, blank-by-default). Briefing service uses them when set, else falls back to `LLM_BRIEFING_PROVIDER` + `LLM_BRIEFING_MODEL` settings. Surfaced in admin under a dedicated fieldset with help text explaining the fallback. Migration `cases/0002`. Verified by setting the override on a placeholder CaseTemplate and observing the briefing CLI route to the override provider.
+
+**3. OpenRouter cost-from-response.** When `LLM_*_PROVIDER=openrouter`, the OpenAI-compat provider now sends `extra_body={"usage": {"include": True}}` on every request, then extracts `usage.cost` from the response into `Usage.actual_cost_usd`. Both providers' `estimate_cost_usd` short-circuit to the actual value when present, so OpenRouter spend is authoritative (not estimated from a local table that doesn't have most of their hundreds of models). Extraction tries three access paths (`.cost` attribute, `model_extra`, `model_dump`) to be robust across openai SDK versions.
+
+**4. Briefing diagnostic for non-tool-using models.** When the loop exits with zero tool calls AND the case had publishable claims, the markdown output leads with a prominent warning block and the CLI prints a yellow WARNING to stderr. Saves a class of confusion where a local LM Studio model returns nice-looking text that's silently uncited.
+
+**5. Deferred again to chunk 3: settings UI in admin** for non-engineer provider swapping. Reasoning: per-CaseTemplate override (which DID land) covers the most common case (Don wants HoLEP on Anthropic, other cases on local models). A global-settings admin model is a real refactor (Django settings aren't editable from admin without a custom backed model + middleware to re-resolve at request time) and out of scope for chunk 2.
+
+**Smoke-tested:**
+- Missing API key on default provider → clear ProviderConfigurationError.
+- Per-case override routes through the override provider (verified by setting `briefing_provider_override=lmstudio` with bogus base URL — get a network error, not the Anthropic-key error).
+- Cache-marker converter produces the canonical Anthropic content shape: one user message with two text blocks, cache_control on the static block only; tool_use round-trip preserved through subsequent turns.
+
+**Known limitations carried forward:**
+
+- LM Studio tool-use is still model-dependent. The new diagnostic makes it loud when a model fails to call `cite()`, but we still don't pre-probe before running. The diagnostic catches the failure mode after the fact, which is good enough for now.
+- Prompt-caching cost estimate depends on the model being in the local Anthropic pricing table. For unknown models, cost falls back to 0; the actual money flowing is what the provider charges (Anthropic dashboard remains authoritative).
+- **Cost shape of the new caching:** Anthropic charges ~1.25x normal input price for cache writes and ~0.1x for cache reads (5-min ephemeral). First call in any flow is a write; subsequent calls within the window are reads. Net win requires ≥2 calls in the window — which is exactly the ingest pipeline shape (propose then audit), and the briefing tool-use loop shape (turn 1 then turns 2..N). Single-call flows with tiny system prompts (e.g. compose-only on a small claim set) pay slightly more than no caching; acceptable rounding error.
+- **OpenAI-compat cache accounting is provider-side only.** Our local pricing fallback for OpenAI / LM Studio / OpenRouter does not subtract `cached_input_tokens` because the OpenAI pricing struct has no cached-price column. OpenAI does automatic server-side caching on long prompts (their dashboard reflects it); OpenRouter folds the discount into `usage.cost` which we now surface authoritatively; LM Studio is free. Net: trust the dashboards / `usage.cost`, not the local estimate, for OpenAI-compat backends.

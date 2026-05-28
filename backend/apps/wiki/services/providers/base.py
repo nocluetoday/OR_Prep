@@ -30,6 +30,10 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     cached_input_tokens: int = 0
+    # Optional authoritative cost (USD) reported by the provider in the response.
+    # When set (non-None), Provider.estimate_cost_usd returns this verbatim
+    # instead of computing from a local pricing table. OpenRouter populates this.
+    actual_cost_usd: float | None = None
 
 
 @dataclass
@@ -65,12 +69,20 @@ class Message:
 
     Assistant messages carry text + tool_calls (the model's response). Subsequent
     user messages either carry plain text or tool_results responding to prior calls.
+
+    `cache=True` marks the message's content as cacheable. Providers that support
+    explicit cache markers (Anthropic prompt caching) apply them; others ignore.
+    Callers split static-from-variable into two Messages so only the static part
+    gets cached — consecutive same-role messages get merged into one provider-
+    native message with multiple content blocks, with cache markers preserved
+    per block.
     """
 
     role: str  # "user" | "assistant"
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
+    cache: bool = False
 
 
 @dataclass
@@ -100,14 +112,21 @@ class Provider(ABC):
         tools: list[ToolSpec] | None = None,
         max_tokens: int = 4096,
         json_mode: bool = False,
+        cache_system: bool = False,
     ) -> CompletionResponse:
-        """Single completion call. json_mode is a hint: providers that support
-        forced-JSON output (OpenAI-compatible chat completions) apply it;
-        Anthropic ignores it because the prompt already instructs JSON shape."""
+        """Single completion call.
+
+        json_mode is a hint: providers that support forced-JSON output
+        (OpenAI-compatible chat completions) apply it; Anthropic ignores it
+        because the prompt already instructs JSON shape.
+
+        cache_system marks the system prompt as cacheable. Providers with
+        explicit cache markers (Anthropic) apply them; others ignore.
+        """
 
     @abstractmethod
     def estimate_cost_usd(self, model: str, usage: Usage) -> float:
-        """Best-effort USD cost estimate from public pricing. Returns 0.0 when the
-        model is unknown to the local pricing table, or when the provider is
-        free (e.g. LM Studio). For authoritative spend, consult the provider's
-        dashboard or — for OpenRouter — the usage block in the API response."""
+        """Best-effort USD cost estimate. Returns `usage.actual_cost_usd` if the
+        provider reported it in the response (OpenRouter); else computes from a
+        local pricing table; else returns 0.0 (model unknown, or free provider
+        like LM Studio)."""

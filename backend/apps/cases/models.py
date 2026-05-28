@@ -49,6 +49,27 @@ class CaseTemplate(models.Model):
     )
     last_reviewed_at = models.DateTimeField(null=True, blank=True)
 
+    # Optional per-case overrides for the briefing provider + model. When set,
+    # the briefing service uses these instead of the global LLM_BRIEFING_*
+    # settings, so high-stakes cases can pin a strict tool-using provider
+    # (Anthropic) while exploratory cases can route to cheap local models.
+    briefing_provider_override = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=(
+            "Optional. One of: anthropic, openai, lmstudio, openrouter. "
+            "If blank, uses LLM_BRIEFING_PROVIDER from settings."
+        ),
+    )
+    briefing_model_override = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text=(
+            "Optional. Model name for the override provider. If blank, uses "
+            "LLM_BRIEFING_MODEL from settings."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

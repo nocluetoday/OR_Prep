@@ -95,14 +95,26 @@ class Command(BaseCommand):
 
         self.stdout.write(result.markdown)
         self.stdout.write("")
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Briefing complete: {len(result.citations)} cited claims, "
-                f"{len(result.rejected_cites)} rejected. "
-                f"~{result.tokens_in}↓ {result.tokens_out}↑ tokens, "
-                f"~${result.cost_usd:.4f} ({result.provider}/{result.model})."
-            )
+        cache_str = (
+            f" (cached: {result.cached_tokens_in}↓)" if result.cached_tokens_in else ""
         )
+        summary = (
+            f"Briefing complete: {len(result.citations)} cited claims, "
+            f"{len(result.rejected_cites)} rejected. "
+            f"~{result.tokens_in}↓{cache_str} {result.tokens_out}↑ tokens, "
+            f"~${result.cost_usd:.4f} ({result.provider}/{result.model})."
+        )
+        if result.no_tool_calls_warning:
+            self.stderr.write(
+                self.style.WARNING(
+                    f"WARNING: {result.provider}/{result.model} did not call the "
+                    "cite() tool for any statement. The briefing is unsupported. "
+                    "Re-run with a tool-calling model."
+                )
+            )
+            self.stdout.write(self.style.WARNING(summary))
+        else:
+            self.stdout.write(self.style.SUCCESS(summary))
 
     def _parse_factors(self, raw: str) -> dict:
         if not raw.strip():
