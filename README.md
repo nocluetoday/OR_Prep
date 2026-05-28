@@ -62,8 +62,9 @@ Four phases with definitions of done in [OR Procedural Case Prep.md](OR%20Proced
 - [x] `apps.documents.Document` extended with source_date, citation, review_status, reviewed_by, last_reviewed_at.
 - [x] Django admin registrations for all of the above.
 
-**Pipelines (CLIs) — done.**
-- [x] Ingest CLI (`manage.py ingest_document`): extract → propose claims → adversarial audit → compose markdown prose into `WikiPage.content` → persist draft Claims + IngestRun log row. Three LLM passes. Follows the [Karpathy LLM-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) model: LLM writes the page, human curates.
+**Pipelines (CLIs) — single-source path done; multi-source synthesis is a known gap.**
+- [x] Ingest CLI (`manage.py ingest_document`): extract → propose claims → adversarial audit → compose markdown prose into `WikiPage.content` → persist draft Claims + IngestRun log row. Three LLM passes. Works correctly for **one source per wiki page**.
+- [ ] **Multi-source synthesis (Karpathy LLM-wiki goal — not yet implemented).** Re-ingesting a second source onto the same wiki page currently rewrites the prose (without the LLM seeing the prior synthesis) and risks silent claim-ID collisions. The right shape is: ingest takes (current page state + existing claims + new source) and emits an updated synthesized page. Real refactor of `services/ingest.py` + the three system prompts. Blocks loading the full HoLEP source set (guideline + technique papers + atlas) into one coherent page. Rationale + design constraints in [docs/journal.md (2026-05-28)](docs/journal.md). Does **not** block the B1 hard-gate test or B2 — those proceed against a single-source wiki page.
 - [x] Briefing CLI (`manage.py generate_briefing`): tool-use loop with server-validated `cite(claim_id)`; renders markdown with citations + a "Citation issues" footer for unsupported cites; loud warning when the model never called the cite tool.
 
 **Provider abstraction — done (goes beyond original Phase A scope; landed because you asked).**

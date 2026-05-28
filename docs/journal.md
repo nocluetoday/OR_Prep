@@ -227,3 +227,27 @@ Where it falls apart: the only current path to populate `SurgeonPreference.prefe
 **Sister item (related, also a usability bet):** mirror `import_case_templates` with a `surgeon_preferences.yaml` importer under `modules/cases/<case_type>/surgeon_preferences/<surgeon_email>.yaml`. Same problem (admin tedium), different solution (file-based authoring for users who prefer text editors). Both paths write to the same model; an attending picks whichever ergonomics they prefer.
 
 **Sequencing constraint.** This is Phase C–parallel "authoring polish," not in the resident-experience flow. It comes **after** B1–B5 ship and Don has tested the resident-facing briefing surface end-to-end. The resident experience must work first; then we reduce authoring friction. Do not let this preempt the existing roadmap.
+
+## 2026-05-28 — Ingest pipeline doesn't actually implement Karpathy multi-source synthesis (gap, deferred)
+
+Surfaced while planning the B1 hard-gate test against Don's real source set (5 journal articles, AUA guideline, Hinman's chapter). The current pipeline has two failure modes when more than one source targets the same wiki page:
+
+1. **Prose gets rewritten, not synthesized.** Re-ingest with the same `--wiki-page-path` replaces `WikiPage.content` with the new source's composed prose (the prior version is preserved as an HTML comment, but it's not part of the next ingest's input). The LLM never sees the prior synthesis when composing the new one. (`apps/wiki/management/commands/ingest_document.py:168-187`)
+2. **Claim IDs collide silently.** Claims are upserted by `(wiki_page, claim_id)`. The LLM proposing claims for source N has no visibility into claim IDs already taken by sources 1..N-1, so a re-used ID silently overwrites prior content. (`apps/wiki/management/commands/ingest_document.py:203-217`)
+
+Don correctly flagged that my "one source per wiki page" workaround is anti-Karpathy — it makes the wiki a flat dump of source-per-page rather than a synthesized multi-source page. The whole point of the LLM-wiki model is that the LLM digests multiple sources into one coherent page; per-source pages would just be a fancier version of the raw `Document` rows that already exist.
+
+**What the right design needs (deferred, not implemented in this PoC pass):**
+
+- Ingest step accepts (current page state + existing claims + new source) as input and emits a synthesized updated page + an updated claim set.
+- Claim identity is stable across re-ingest. Options: (a) DB-assigned auto-IDs with content-based dedupe in the audit step, (b) content-hash IDs, (c) LLM proposes IDs against a list of existing claim IDs it must not collide with. Each has tradeoffs in re-author cost vs LLM cognitive load.
+- Each Claim still FKs to a single `source_document` (the source that grounds it most strongly). Cross-source corroboration / contradiction handling falls to the audit step — its verdict set may need to extend beyond {grounded, ungrounded, weak} to include {corroborated_by_new_source, contradicted_by_new_source}.
+- Prompts and CLI flag set rethought from scratch — this is a real refactor of `services/ingest.py` and the three system prompts, not a small tweak.
+
+**Implications for the current PoC:**
+
+- For **B1 hard-gate test (one source)**, the existing pipeline is fine. One source → one page → no collision risk. Don can run the smoke test as-is.
+- For **multi-source ingest**, the pipeline is broken. Workarounds degrade the briefing surface (per-source pages dilute synthesis; the briefing would see a wall of fragments instead of an integrated page).
+- The Phase A "Pipelines — done" claim in the README is overstated. The single-source path works; the multi-source path is unimplemented. Updated the README to mark this honestly.
+
+**Sequencing:** this is a Phase A.5 / knowledge-layer refactor item, parallel to the resident surface (B1–B5) and the authoring polish track. It must land **before** Don tries to onboard the full HoLEP source set (probably 5–10 sources eventually), but does not block B1 hard-gate or the start of B2 because both can proceed against a single-source wiki page. Real urgency hits when source #2 wants to merge into the same page.
