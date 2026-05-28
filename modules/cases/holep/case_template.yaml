@@ -1,0 +1,163 @@
+# HoLEP — Holmium Laser Enucleation of the Prostate
+#
+# Reference shape per schemas/case_template.schema.yaml. Loaded by
+# `manage.py import_case_templates`. Faculty review goes in admin; this YAML
+# is the source of truth for the briefing-shape content + the resident input
+# form schema.
+
+case_type: holep
+title: HoLEP (Holmium Laser Enucleation of the Prostate)
+specialty: urology
+summary: |
+  Endoscopic enucleation of the prostatic adenoma off the surgical capsule
+  using a holmium laser, with morcellation in the bladder. Indicated for
+  obstructive LUTS or urinary retention from benign prostatic enlargement,
+  across the full spectrum of prostate sizes. Anticoagulated patients are
+  commonly preferred candidates over TURP given the hemostatic profile.
+
+version: 0.1.0
+source_version_date: "2026-05"
+review_status: draft
+
+anatomy_focus:
+  - Verumontanum as the apical landmark for enucleation; preserving the
+    external sphincter immediately distal to it.
+  - Surgical capsule plane between adenoma and prostatic capsule; bloodless
+    when developed correctly.
+  - Bladder neck at the 5 and 7 o'clock positions where the lateral lobes
+    meet the median lobe.
+  - Median lobe anatomy and its relationship to the trigone and ureteral
+    orifices.
+
+decision_points:
+  - id: enucleation_starting_lobe
+    label: Which lobe to enucleate first
+    description: |
+      Median-lobe-first vs lateral-lobes-first vs en-bloc. Choice driven by
+      gland anatomy (presence and size of median lobe), surgeon training,
+      and bleeding picture.
+  - id: morcellation_strategy
+    label: Morcellation strategy
+    description: |
+      Morcellate after each lobe vs after all enucleation complete. Affects
+      operative time, visualization, and bladder-injury risk.
+  - id: apical_dissection
+    label: Apical dissection technique
+    description: |
+      Mucosal incision at the verumontanum and dissecting backward
+      ("apical release") vs working antegrade toward the apex. Antegrade
+      is more forgiving for trainees; retrograde apical release is faster
+      in experienced hands.
+  - id: hemostasis_threshold
+    label: When to pause for hemostasis
+    description: |
+      Continuous low-flow visualization vs stop-and-coagulate. Affects
+      operative time and irrigation requirements; matters more on
+      anticoagulated patients.
+  - id: catheter_management
+    label: Postop catheter and CBI plan
+    description: |
+      Foley size, balloon volume, continuous bladder irrigation duration,
+      and timing of trial of void.
+
+complication_patterns:
+  - label: Capsular perforation
+    triggers:
+      - Loss of plane visualization
+      - Aggressive lateral dissection beyond the capsule
+    management: |
+      Recognize early via fat or extravesical structures in view; complete
+      enucleation in the correct plane, maintain low irrigation pressure,
+      extend catheter duration. Imaging only if extraperitoneal
+      extravasation suspected.
+  - label: Bladder injury during morcellation
+    triggers:
+      - Empty bladder during morcellation
+      - Morcellator drawn against the bladder wall
+    management: |
+      Maintain bladder distention throughout morcellation, keep morcellator
+      tip in mid-bladder, stop if mucosa visualized at the blades. Repair
+      depends on size and full vs partial thickness; small injuries often
+      managed with prolonged catheter.
+  - label: Postop stress urinary incontinence
+    triggers:
+      - Injury to external sphincter at the apex
+      - Over-aggressive apical dissection past the verumontanum
+    management: |
+      Most cases self-resolve over weeks to months. Pelvic floor PT first,
+      then re-evaluation at 6–12 months. Persistent SUI may warrant sling.
+  - label: Postop urinary retention
+    triggers:
+      - Detrusor underactivity preoperatively (chronic retention)
+      - Postop clot retention
+    management: |
+      Trial of void on schedule; CIC vs indwelling catheter if failed;
+      counsel on possible need for ongoing CIC in chronic-retention
+      patients regardless of obstruction relief.
+  - label: TUR-like syndrome (rare with saline)
+    triggers:
+      - Prolonged operative time with extravasation
+    management: |
+      Stop the procedure, manage hyponatremia / fluid overload supportively.
+      Lower risk than monopolar TURP because of saline irrigation.
+
+attending_question_categories:
+  - Why HoLEP for this patient rather than TURP, simple prostatectomy, or
+    Aquablation given size and anticoagulation status?
+  - How will you adjust technique for a large median lobe vs no median lobe?
+  - What's your plan for hemostasis if visualization is lost mid-enucleation?
+  - How will you handle the apex to minimize sphincter injury?
+  - What's your postop catheter and CBI plan, and when do you trial void?
+
+input_schema:
+  quick:
+    - name: prostate_volume_g
+      label: "Prostate volume (g)"
+      type: number
+      required: true
+      help_text: "Estimated by TRUS, MRI, or preoperative cystoscopy."
+    - name: indication
+      label: Indication
+      type: select
+      required: true
+      options:
+        - { value: retention, label: "Urinary retention" }
+        - { value: luts, label: "Obstructive LUTS" }
+        - { value: hematuria, label: "Refractory hematuria" }
+        - { value: other, label: "Other (specify in focus)" }
+    - name: anticoagulation
+      label: Anticoagulation
+      type: select
+      required: true
+      options:
+        - { value: none, label: "None" }
+        - { value: aspirin, label: "Aspirin only" }
+        - { value: warfarin, label: "Warfarin" }
+        - { value: doac, label: "DOAC" }
+        - { value: dual_antiplatelet, label: "Dual antiplatelet" }
+    - name: prior_interventions
+      label: "Prior BPH interventions"
+      type: multi_select
+      required: false
+      options:
+        - { value: turp, label: "Prior TURP" }
+        - { value: greenlight, label: "Greenlight (PVP)" }
+        - { value: rezum, label: "Rezum" }
+        - { value: uplift, label: "UroLift" }
+        - { value: simple_prostatectomy, label: "Simple prostatectomy" }
+
+  expanded:
+    - name: qmax_ml_per_s
+      label: "Qmax (mL/s)"
+      type: number
+      required: false
+      help_text: "Peak flow rate on uroflowmetry, if available."
+    - name: pvr_ml
+      label: "Post-void residual (mL)"
+      type: number
+      required: false
+    - name: notable_comorbidities
+      label: "Notable comorbidities"
+      type: text
+      required: false
+      help_text: "Cardiac, pulmonary, anesthesia concerns, mobility limits."

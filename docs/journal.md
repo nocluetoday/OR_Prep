@@ -192,3 +192,19 @@ The README's Phase B section restructured into the five ordered chunks (B1-B5) w
 - **Layout: flat under `modules/cases/<case_type>/case_template.yaml`** (not specialty-nested), because the PoC is single-specialty per the scope doc.
 
 **Out of scope until B1 closes:** any frontend code, any briefing prompt / service changes, any telemetry-app scaffolding, a second case template. The refinement doc's "What not to build" section names additional non-goals across Phase B (no multi-step wizard, no notification systems beyond in-app, no calendar integration, no general-tutor follow-ups).
+
+## 2026-05-27 — Step B1 landed (code-side; awaiting Don's end-to-end test)
+
+All B1 code work landed against the [approved plan](resident-ux-refinement.md#step-b1--approved-implementation-plan):
+
+- `CaseTemplate.patient_factor_fields → input_schema` rename via `cases/0003`. Module-level `_default_input_schema()` callable returns `{"quick": [], "expanded": []}` (not a lambda — migrations need it serializable). Migration is the expected `RemoveField` + `AddField` diff.
+- `schemas/case_template.schema.yaml` documents the full YAML shape (top-level fields, `input_schema.quick` + `input_schema.expanded` blocks, per-field properties) and embeds the three invariants the refinement plan flagged: field-name-as-contract, per-template versioning, unique names across both groups.
+- `apps.cases.management.commands.import_case_templates` mirrors `import_modules` (rglob, `_template` skip, atomic per-file upsert keyed on `case_type`, `--dry-run` + `--path` flags, created/updated/unchanged counters). Strict validation: slug shape on `case_type` and field `name`s; type allowlist (`select | text | number | boolean | multi_select`); non-empty `options` for select/multi_select; unique field names across `quick + expanded` in a single file. Validation failures exit non-zero with clear stderr.
+- `modules/cases/holep/case_template.yaml` authored with realistic urology content (4 anatomy focus areas, 5 decision points, 5 complication patterns, 5 attending-question categories) plus the planned input schema (4 quick / 3 expanded). Flat layout under `modules/cases/<case_type>/` per the layout choice locked in the refinement doc.
+- Admin fieldset surfaces `input_schema` (replaces the dead `patient_factor_fields` reference).
+
+**Verification list (all 11 steps green):** `manage.py check` passes; migration applies cleanly; `--dry-run` parses without writes; first real import shows `updated: holep` (because the placeholder smoke-test row already had `case_type=holep` at pk=1 from earlier); re-run reports `unchanged: holep`; editing the YAML and re-running reports `updated`; duplicate-field-name negative test exits 1 with the right message; empty-options negative test exits 1 with the right message; admin shows the row with `input_schema` populated; briefing CLI smoke (no key path) still raises `ProviderConfigurationError` cleanly (no service regression).
+
+**Detail worth noting for B2:** the importer's `update_or_create` followed by a field-by-field comparison against the prior snapshot is what lets it distinguish `updated` from `unchanged` — keeps re-imports honest about whether anything actually changed. If B2 starts touching CaseTemplate from the web side, that comparison stays valid because the API and the importer write the same defaults dict.
+
+**B1 hard gate is still open** until Don runs the full flow end-to-end: `import_case_templates` → create his faculty user + Neff `SurgeonPreference` row → ingest a reviewed source PDF → run `generate_briefing --case holep --factors '...' --surgeon ...` and confirm the resident-input dict flows into the briefing prompt with the expected keys. **Do not start B2 until that gate passes.**

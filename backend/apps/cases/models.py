@@ -9,6 +9,17 @@ class ReviewStatus(models.TextChoices):
     ARCHIVED = "archived", "Archived"
 
 
+def _default_input_schema() -> dict:
+    """Default empty input schema with both groups present.
+
+    Module-level callable (not lambda) so Django migrations can serialize it.
+    The shape — `{"quick": [...], "expanded": [...]}` — is documented in
+    `schemas/case_template.schema.yaml` and enforced by `import_case_templates`.
+    """
+
+    return {"quick": [], "expanded": []}
+
+
 class CaseTemplate(models.Model):
     """A briefing skeleton for one procedural case type.
 
@@ -30,9 +41,14 @@ class CaseTemplate(models.Model):
     complication_patterns = models.JSONField(default=list, blank=True)
     attending_question_categories = models.JSONField(default=list, blank=True)
 
-    # Input form metadata: which patient factors this case type wants the
-    # resident to fill in, with hints.
-    patient_factor_fields = models.JSONField(default=list, blank=True)
+    # Per-case input schema: the form fields the resident fills in when
+    # requesting a briefing for this case type. Shape is
+    # `{"quick": [field...], "expanded": [field...]}` where each field is a
+    # dict {name, label, type, required, options?, help_text?}. Authored in
+    # YAML, loaded via `manage.py import_case_templates`. Field names submit
+    # into a flat dict on the briefing call, so names must be unique across
+    # quick + expanded — the importer enforces this.
+    input_schema = models.JSONField(default=_default_input_schema, blank=True)
 
     review_status = models.CharField(
         max_length=32,

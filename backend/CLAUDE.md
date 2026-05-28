@@ -6,7 +6,7 @@ Django 5.2 + DRF. Source of truth for users, modules, progress, uploads.
 
 - `config/` — project: `settings/{base,dev,prod}.py`, `urls.py`, `views.py` (health), wsgi/asgi
 - `apps/users/` — custom User model (email login, role), auth endpoints, role permission classes
-- `apps/cases/` — CaseTemplate + SurgeonPreference. `services/briefing.py` owns the briefing tool-use loop with `cite(claim_id)`; `management/commands/generate_briefing.py` is the CLI.
+- `apps/cases/` — CaseTemplate + SurgeonPreference. `services/briefing.py` owns the briefing tool-use loop with `cite(claim_id)`; `management/commands/generate_briefing.py` is the CLI. `management/commands/import_case_templates.py` is the YAML loader for `modules/cases/**/case_template.yaml`; shape spec in `schemas/case_template.schema.yaml`. CaseTemplate's `input_schema` field declares the resident-facing input form (`quick` + `expanded` groups of typed fields); field names submit into a flat `patient_factors` dict on the briefing call and must be unique across the two groups.
 - `apps/wiki/` — WikiPage + Claim + IngestRun (append-only ingest log). `services/providers/` holds the provider abstraction (`base.py` ABC + `anthropic.py` + `openai_compat.py` + `registry.py`); ingest and briefing services never import an SDK directly. `services/ingest.py` runs propose → adversarial-audit → compose-markdown-prose through the provider abstraction; `management/commands/ingest_document.py` is the CLI and writes both the prose into `WikiPage.content` and the audit-flagged Claims off the page.
 - `apps/documents/` — Document with source freshness fields (`source_date`, `citation`, `review_status`, `reviewed_by`, `last_reviewed_at`). FK is mutually exclusive between `case_template` and `module`.
 - `apps/modules/` — legacy curriculum schema (Module + LearningObjective + KnowledgeCheck + Reference) + `import_modules` YAML importer. Retained for compatibility; not read by the briefing path.
@@ -35,6 +35,7 @@ Run from `backend/`:
 .venv/bin/python manage.py makemigrations             # generate migrations
 .venv/bin/python manage.py createsuperuser            # admin login
 .venv/bin/python manage.py import_modules             # seed legacy Module schema from modules/*.yaml
+.venv/bin/python manage.py import_case_templates      # upsert CaseTemplate rows from modules/cases/**/case_template.yaml
 .venv/bin/python manage.py ingest_document <path> \
     --case-type holep --wiki-page-path operative-technique \
     --citation "AUA HoLEP Guideline (2024)" --source-date 2024-08 \

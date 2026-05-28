@@ -88,14 +88,14 @@ Phase B turns the auth shell into a real briefing tool. **Full refined spec, per
 
 Five ordered steps with hard gates between them. **Do not start step N+1 until step N is working end-to-end and Don has tested it.**
 
-#### Step B1 — Per-case input schema mechanism (architectural foundation)
+#### Step B1 — Per-case input schema mechanism (architectural foundation; awaiting Don's end-to-end test)
 
-- [ ] Rename `CaseTemplate.patient_factor_fields` → `input_schema` with default `{"quick": [], "expanded": []}`; single migration.
-- [ ] YAML schema spec at `schemas/case_template.schema.yaml` documenting top-level fields + the `input_schema` block (per-field: `name`, `label`, `type` ∈ {`select`, `text`, `number`, `boolean`, `multi_select`}, `required`, `options[]`, `help_text`).
-- [ ] `manage.py import_case_templates` mirroring `import_modules.py`; validates structure, reports created/updated/unchanged, `--dry-run` + `--path` flags.
-- [ ] Sample HoLEP at `modules/cases/holep/case_template.yaml`: realistic anatomy / decisions / complications / questions, quick set (`prostate_volume_g`, `indication`, `anticoagulation`, `prior_interventions`), expanded (`qmax_ml_per_s`, `pvr_ml`, `notable_comorbidities`).
-- [ ] Admin fieldsets surface `input_schema`.
-- [ ] **Hard gate: Don tests B1 end-to-end before B2 starts.**
+- [x] Rename `CaseTemplate.patient_factor_fields` → `input_schema` with default `{"quick": [], "expanded": []}`; single migration (`cases/0003`).
+- [x] YAML schema spec at `schemas/case_template.schema.yaml` documenting top-level fields + the `input_schema` block (per-field: `name`, `label`, `type` ∈ {`select`, `text`, `number`, `boolean`, `multi_select`}, `required`, `options[]`, `help_text`). Includes field-name-as-contract + per-template-version invariants.
+- [x] `manage.py import_case_templates` mirroring `import_modules.py`; validates structure (slug, type allowlist, non-empty options for select/multi_select, unique names across quick+expanded); reports created/updated/unchanged; `--dry-run` + `--path` flags; non-zero exit on validation failure.
+- [x] Sample HoLEP at `modules/cases/holep/case_template.yaml`: realistic anatomy / decisions / complications / questions, quick set (`prostate_volume_g`, `indication`, `anticoagulation`, `prior_interventions`), expanded (`qmax_ml_per_s`, `pvr_ml`, `notable_comorbidities`).
+- [x] Admin fieldsets surface `input_schema`.
+- [ ] **Hard gate: Don tests B1 end-to-end before B2 starts.** Run `manage.py import_case_templates`, then author a SurgeonPreference + ingest a real source PDF + run `generate_briefing --case holep ...` and confirm the resident-input dict flows into the briefing prompt with the expected keys.
 
 #### Step B2 — Single-screen input form
 

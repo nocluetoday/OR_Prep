@@ -28,7 +28,7 @@ class CaseTemplateAdmin(SimpleHistoryAdmin):
                     "decision_points",
                     "complication_patterns",
                     "attending_question_categories",
-                    "patient_factor_fields",
+                    "input_schema",
                 ),
             },
         ),

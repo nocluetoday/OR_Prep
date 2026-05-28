@@ -1,0 +1,73 @@
+# Human-readable schema for case templates.
+#
+# One YAML per case type, lives at modules/cases/<case_type>/case_template.yaml.
+# Loaded by `manage.py import_case_templates` into `apps.cases.CaseTemplate`.
+# Mirrors schemas/module.schema.yaml in style; uses '|' for enums and arrays
+# for repeated entries.
+
+case_type: string                # slug (snake_case or kebab-case); unique
+title: string                    # display name
+specialty: string                # default "urology"
+summary: string                  # one-paragraph case description
+version: string                  # semver-ish, manually bumped per content edit
+source_version_date: string      # optional, e.g. "2026-05"
+review_status: draft | published | archived
+
+# Structured arrays the briefing LLM reads as recipe. Each entry is a small
+# dict; the exact shape is template-author choice (the LLM consumes it as
+# context, not the app querying into it).
+anatomy_focus:
+  - string
+decision_points:
+  - id: string
+    label: string
+    description: string
+complication_patterns:
+  - label: string
+    triggers: [string]
+    management: string
+attending_question_categories:
+  - string
+
+# Per-case input schema — drives the resident-facing input form. The single-
+# screen form (Phase B2) renders `quick` by default and shows `expanded`
+# behind a "More detail" expander. Field `name` becomes the dict key in
+# `patient_factors` passed to the briefing service.
+input_schema:
+  quick:
+    - name: string             # snake_case slug; UNIQUE across quick + expanded
+      label: string            # human-readable form label
+      type: select | text | number | boolean | multi_select
+      required: bool           # defaults false when omitted
+      help_text: string        # optional
+      options:                 # required when type is select or multi_select; must be non-empty
+        - value: string        # what gets stored
+          label: string        # what the resident sees
+  expanded:
+    - name: string
+      label: string
+      type: select | text | number | boolean | multi_select
+      required: bool
+      help_text: string
+      options:
+        - value: string
+          label: string
+
+# --- Invariants ---------------------------------------------------------------
+#
+# 1. Field-name contract. Once a field's `name` is published, changing it
+#    silently invalidates any future briefings whose persisted resident input
+#    was keyed to the old name. Plan a migration story before renaming any
+#    published field (handled in step B5 / telemetry when submitted inputs
+#    start being persisted).
+#
+# 2. Schema versioning is per-template, not per-schema. The top-level `version`
+#    bumps when ANY content (including input_schema) changes. There is no
+#    machine-readable signal that prior submissions used a different
+#    input_schema shape — if `type`'s allowed set extends later (e.g. adding
+#    `date`), analysis must read `version` to disambiguate.
+#
+# 3. Names unique across quick + expanded. The form merges both groups into
+#    one flat `patient_factors` dict on submit; collisions would silently
+#    overwrite. The importer enforces uniqueness and exits non-zero on
+#    duplicates.
