@@ -6,13 +6,21 @@ If you are starting a Claude Code session against this repo, read [OR Procedural
 
 ## What this tool does
 
-The user is a urology resident preparing for a case in the next 12–24 hours. They open the tool, pick the case type from a constrained list, fill in patient factors (5–8 structured fields), optionally name the surgeon and the thing they're worried about, choose a time budget (5 / 10 / 20 minutes), and submit. The tool produces a structured briefing covering case summary, anatomy refresher, key decision points, anticipated complications, surgeon-specific divergences from the generic approach (if applicable), likely attending questions, and a sources list. Every factual claim is cited to a reviewed wiki page; every cite is hoverable to the source span.
+A urology resident is scrubbing a case in the next 12–24 hours. To walk in prepared, they need a specific set of things in their head: the relevant anatomy for this patient's configuration, the intraoperative decisions likely to come up, what can go wrong and how it's handled, and how the attending running the room prefers to operate. Some of that lives in textbooks and guidelines. The attending-specific part usually isn't written down anywhere. How Dr. Neff handles a large median lobe, what he'll ask at the apex — residents pick that up case by case, or get caught flat-footed in the OR.
 
-The whole interaction is meant to take under the time budget the resident specified. Input under 60 seconds; read in 5 / 10 / 20 minutes; close the tab.
+OR Prep assembles that preparation on demand. The resident picks the case type from a constrained list, fills in five to eight structured patient factors, optionally names the surgeon and the one thing they're most worried about, and chooses a time budget of 5, 10, or 20 minutes. The tool returns a structured briefing: a one-paragraph case summary, an anatomy refresher tuned to the factors entered, the key decision points, anticipated complications with their management, the surgeon's documented divergences from the generic approach, and the questions the attending is likely to ask.
+
+Two kinds of content feed a briefing, and the tool keeps them separate. Generalizable facts about anatomy, technique, and complications come from a knowledge base that faculty have reviewed, and every such claim is cited to its source span. Attending-specific preferences are attributed to the named surgeon and marked as that surgeon's documented practice, never dressed up as evidence. A resident should always be able to tell what the literature establishes from what one surgeon happens to prefer.
+
+Correctness is the reason the system is shaped the way it is. Residents use these briefings to prepare for live surgery, so a confidently-wrong statement is the worst output the tool can produce. Every factual claim traces back to a reviewed source through a citation step the server validates; anything that cannot be grounded is dropped or flagged rather than shown as fact. That requirement is why OR Prep is built around a curated, faculty-reviewed knowledge base instead of a general-purpose chatbot that will fluently invent a plausible answer.
+
+The whole interaction is meant to fit inside the time the resident gave it. Fill the form in under a minute, read for 5, 10, or 20, close the tab.
 
 ## What this tool does not do
 
-Not a tutor. Not a question bank. Not a study tool. Not intraoperative guidance. Not clinical decision support. Not a generalized medical reasoning system. Not for patient-specific use beyond depersonalized case characteristics; no PHI.
+It does not teach, and that boundary is deliberate. The user is a competent resident who is short on time before a case, not a student to be quizzed, so the tool stays out of education entirely.
+
+Not a tutor. Not a question bank. Not a study tool with progress tracking. Not intraoperative guidance. Not clinical decision support. Not a generalized medical reasoning system. Not for patient-specific use beyond the depersonalized case characteristics the resident enters; no PHI, ever.
 
 ## Stack
 
