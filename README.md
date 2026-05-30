@@ -6,19 +6,19 @@ If you are starting a Claude Code session against this repo, read [OR Procedural
 
 ## What this tool does
 
-A urology resident has a case in the next 12 to 24 hours. To walk in ready, they need a few specific things in their head: the anatomy that matters for this patient, the decisions that will come up during the case, what can go wrong and how to handle it, and how the attending running the room likes to operate. Some of that is in textbooks. The attending-specific part usually isn't written down at all. How Dr. Neff handles a large median lobe, what he asks at the apex — you learn it case by case, or you get caught flat-footed.
+A urology resident has a case in the next 12 to 24 hours. To walk in ready, they need a few specific things in their head: the anatomy that matters for this patient, the decisions that will come up during the case, what can go wrong and how to handle it, and how the attending running the room likes to operate. Some of that is in textbooks. The attending-specific part usually isn't written down at all. How Dr. Neff handles a large median lobe, what he asks at the apex.  This is learned case by case, or resident gets caught out.
 
-OR Prep builds that prep on demand. The resident picks the case type from a fixed list, enters five to eight patient factors, optionally names the surgeon and the one thing they're worried about, and picks a time budget of 5, 10, or 20 minutes. Back comes a structured briefing: a one-paragraph case summary, an anatomy refresher keyed to the factors entered, the decision points to expect, the complications that fit this configuration and how to manage them, the surgeon's specific departures from the generic approach, and the questions the attending is likely to ask.
+OR Prep builds that prep on demand. The resident picks the case type from a fixed list, enters five to eight patient factors, optionally names the surgeon and the one thing they're worried about, and picks a time budget of 5, 10, or 20 minutes. The app returns a structured briefing: a one-paragraph case summary, anatomy refresher keyed to the factors entered, the decision points to expect, the complications that fit this configuration and how to manage them, the surgeon's specific departures from the generic approach, and the questions the attending is likely to ask.
 
 Two kinds of content go into a briefing, and they stay separate. General facts (anatomy, technique, complications) come from a knowledge base that faculty have reviewed, and every claim is cited to its source. Surgeon preferences are tagged to the named surgeon as that surgeon's documented practice, not passed off as evidence. A resident should always be able to tell what the literature says from what one attending happens to do.
 
-Correctness drives the whole design. Residents use these briefings to prep for real surgery, so the worst thing the tool can do is state something wrong with confidence. Every factual claim has to resolve to a reviewed source through a citation step the server checks, and anything that can't be grounded gets dropped or flagged instead of shown as fact. That is why OR Prep runs on a curated, faculty-reviewed knowledge base and not a general chatbot, which will happily invent a plausible answer.
+Correctness drives the whole design. Residents use these briefings to prep for real surgery, so the worst thing the tool can do is state something wrong with confidence. Every factual claim has to resolve to a reviewed source through a citation step the server checks, and anything that can't be grounded gets dropped or flagged instead of shown as fact. OR Prep runs on a curated, faculty-reviewed knowledge base and is not intended to be a general chatbot, which will happily hallucinate a plausible (but untrue) answer.
 
-The whole thing is supposed to fit the time the resident gave it. Fill the form in under a minute, read for 5, 10, or 20, close the tab.
+The whole thing is supposed to fit the time the resident gave it. Fill the form in under a minute, read for 5, 10, or 20, close the tab.  Minimal friction to maximize prep.
 
 ## What this tool does not do
 
-It does not teach, on purpose. The user is a competent resident who is short on time before a case, not a student to quiz. So the tool stays out of teaching altogether.
+It does not teach, on purpose. The user is a competent resident who is short on time before a case, not a student to quiz. The tool stays out of teaching altogether.
 
 Not a tutor. Not a question bank. Not a study tool with progress tracking. Not intraoperative guidance. Not clinical decision support. Not a general medical reasoning engine. Not for anything patient-specific beyond the depersonalized case details the resident types in. No PHI, ever.
 
