@@ -133,7 +133,7 @@ Expected impact at the $100/month cap: briefing repeats on the same case within 
 
 **3. OpenRouter cost-from-response.** When `LLM_*_PROVIDER=openrouter`, the OpenAI-compat provider now sends `extra_body={"usage": {"include": True}}` on every request, then extracts `usage.cost` from the response into `Usage.actual_cost_usd`. Both providers' `estimate_cost_usd` short-circuit to the actual value when present, so OpenRouter spend is authoritative (not estimated from a local table that doesn't have most of their hundreds of models). Extraction tries three access paths (`.cost` attribute, `model_extra`, `model_dump`) to be robust across openai SDK versions.
 
-**4. Briefing diagnostic for non-tool-using models.** When the loop exits with zero tool calls AND the case had publishable claims, the markdown output leads with a prominent warning block and the CLI prints a yellow WARNING to stderr. Saves a class of confusion where a local LM Studio model returns nice-looking text that's silently uncited.
+**4. Briefing diagnostic for non-tool-using models.** When the loop exits with zero tool calls AND the case had published claims, the markdown output leads with a prominent warning block and the CLI prints a yellow WARNING to stderr. Saves a class of confusion where a local LM Studio model returns nice-looking text that's silently uncited.
 
 **5. Deferred again to chunk 3: settings UI in admin** for non-engineer provider swapping. Reasoning: per-CaseTemplate override (which DID land) covers the most common case (Don wants HoLEP on Anthropic, other cases on local models). A global-settings admin model is a real refactor (Django settings aren't editable from admin without a custom backed model + middleware to re-resolve at request time) and out of scope for chunk 2.
 
@@ -251,3 +251,11 @@ Don correctly flagged that my "one source per wiki page" workaround is anti-Karp
 - The Phase A "Pipelines — done" claim in the README is overstated. The single-source path works; the multi-source path is unimplemented. Updated the README to mark this honestly.
 
 **Sequencing:** this is a Phase A.5 / knowledge-layer refactor item, parallel to the resident surface (B1–B5) and the authoring polish track. It must land **before** Don tries to onboard the full HoLEP source set (probably 5–10 sources eventually), but does not block B1 hard-gate or the start of B2 because both can proceed against a single-source wiki page. Real urgency hits when source #2 wants to merge into the same page.
+
+## 2026-05-31 — Briefing citation gate tightened to published claims only
+
+The briefing service had a correctness mismatch: docs and prompts said `cite(claim_id)` resolves only faculty-published claims, but `_load_publishable_claims()` loaded both `audited_ok` and `published` claims. That made early CLI testing easier but weakened the explicit faculty-review gate.
+
+Changed the helper to `_load_published_claims()` and filter strictly on `ClaimAuditStatus.PUBLISHED`. `Claim.is_publishable` remains broader (`audited_ok` or `published`) because admin review can still treat audited-OK claims as candidates for publication; the resident briefing context cannot cite them until faculty promotes them to `published`.
+
+Added a regression test proving an `audited_ok` claim is excluded from briefing context while a `published` claim is included.

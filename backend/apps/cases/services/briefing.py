@@ -23,7 +23,6 @@ from apps.wiki.models import Claim, ClaimAuditStatus
 from apps.wiki.services.llm_config import get_stage_model, get_stage_provider
 from apps.wiki.services.providers import (
     Message,
-    ToolCall,
     ToolResult,
     ToolSpec,
     Usage,
@@ -105,11 +104,11 @@ class BriefingResult:
     no_tool_calls_warning: bool = False
 
 
-def _load_publishable_claims(case_template: CaseTemplate) -> dict[str, Claim]:
+def _load_published_claims(case_template: CaseTemplate) -> dict[str, Claim]:
     qs = (
         Claim.objects.filter(
             wiki_page__case_template=case_template,
-            audit_status__in=(ClaimAuditStatus.AUDITED_OK, ClaimAuditStatus.PUBLISHED),
+            audit_status=ClaimAuditStatus.PUBLISHED,
         )
         .select_related("source_document", "wiki_page")
     )
@@ -188,8 +187,8 @@ def generate_briefing(
     No DB writes: the caller decides what to persist (Phase B telemetry).
     """
 
-    claims_by_id = _load_publishable_claims(case_template)
-    has_publishable_claims = bool(claims_by_id)
+    claims_by_id = _load_published_claims(case_template)
+    has_published_claims = bool(claims_by_id)
 
     # Static payload — the case template + surgeon prefs + claim catalog. Repeats
     # across briefings on the same case, so we cache it. Variable payload — the
@@ -317,7 +316,7 @@ def generate_briefing(
     # the configured model almost certainly does not support function calling
     # (common with local LM Studio models). Surface this loudly so the briefing
     # is not mistaken for a validated artifact.
-    no_tools_warning = has_publishable_claims and not any_tool_call_ever
+    no_tools_warning = has_published_claims and not any_tool_call_ever
 
     markdown = _render_markdown(
         "".join(final_text_parts),

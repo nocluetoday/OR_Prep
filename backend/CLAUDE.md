@@ -60,7 +60,7 @@ Per-CaseTemplate override: `CaseTemplate.briefing_provider_override` and `briefi
 
 Prompt caching: `Message(cache=True)` and `cache_system=True` are honored by the AnthropicProvider (applies `cache_control: ephemeral`). Ingest caches document text across propose+audit (within Anthropic's 5-minute ephemeral window) and caches all three system prompts. Briefing caches the static catalog (case template + surgeon prefs + claim list) + system prompt; the variable per-request inputs live in a separate uncached block. OpenAI-compat providers ignore the flags (OpenAI does automatic server-side caching on long prompts).
 
-Briefing tool-use loops require providers that support function calling; many local LM Studio models do not. When the loop exits with zero tool calls AND the case has publishable claims, the briefing output leads with a prominent warning and the CLI prints a stderr warning — the briefing is unsupported and should not be used as a citable artifact. The relevant API key for whichever provider a stage uses must be set; commands raise `ProviderConfigurationError` if not. LM Studio's "key" is a sentinel — any non-empty string works — and the default is "lm-studio".
+Briefing tool-use loops require providers that support function calling; many local LM Studio models do not. When the loop exits with zero tool calls AND the case has published claims, the briefing output leads with a prominent warning and the CLI prints a stderr warning — the briefing is unsupported and should not be used as a citable artifact. The relevant API key for whichever provider a stage uses must be set; commands raise `ProviderConfigurationError` if not. LM Studio's "key" is a sentinel — any non-empty string works — and the default is "lm-studio".
 
 ## Conventions
 
