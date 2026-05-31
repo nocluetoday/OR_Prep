@@ -1,4 +1,4 @@
-# OR Prep — Claude Code agent guide
+# OR Prep — Codex agent guide
 
 This is a proof-of-concept procedural case-prep tool for urology residents. Resident inputs a case → tool emits a structured briefing with cited sources. Not a tutor.
 
@@ -8,7 +8,7 @@ This is a proof-of-concept procedural case-prep tool for urology residents. Resi
 
 ## Codex / Claude handoff
 
-`CLAUDE.md` is the Claude Code guide. `AGENTS.md` is the Codex guide. Keep the two top-level files intentionally equivalent so either agent can resume the same plan without reinterpreting scope.
+`AGENTS.md` is the Codex guide. `CLAUDE.md` is the Claude Code guide. Keep the two top-level files intentionally equivalent so either agent can resume the same plan without reinterpreting scope.
 
 The area-specific guides currently live as `CLAUDE.md` files only: `backend/CLAUDE.md`, `frontend/CLAUDE.md`, and `docker/CLAUDE.md`. Codex should read those same subdir guides unless matching `AGENTS.md` files are added later.
 

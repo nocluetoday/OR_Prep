@@ -2,7 +2,7 @@
 
 > **Scope.** This is a proof-of-concept procedural cognitive prep tool for urology residents, built as a research artifact. A resident inputs a case they are preparing for, and the tool produces a structured 5–20 minute briefing grounded in faculty-reviewed sources, with every claim cited. KU urology residents serve as opt-in beta testers. Deliverables are the system, the design rationale, and beta-use data suitable for publication. This is not a production service and is not clinical decision support.
 
-If you are starting a Claude Code session against this repo, read [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) first.
+If you are starting a Claude Code or Codex session against this repo, read [OR Procedural Case Prep.md](OR%20Procedural%20Case%20Prep.md) first. Claude Code uses [CLAUDE.md](CLAUDE.md); Codex uses [AGENTS.md](AGENTS.md). Keep those two top-level agent guides intentionally equivalent.
 
 ## What this tool does
 
